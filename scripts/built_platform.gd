@@ -6,9 +6,9 @@ extends StaticBody2D
 ## only the visual scales in, so a panic-build under your feet still saves you.
 
 const SIZE := Vector2(240.0, 24.0)
-const LIFETIME := 4.0
-const BLINK_AT := 2.8
+const BLINK_WINDOW := 1.2  # blink warning starts this long before crumbling
 
+var lifetime := 4.0  # Main shortens this late-game (see Main.platform_life_for)
 var age := 0.0
 var visual_scale := 0.2
 
@@ -32,11 +32,12 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	age += delta
-	if age >= LIFETIME:
+	if age >= lifetime:
 		queue_free()
 		return
-	if age >= BLINK_AT:
-		modulate.a = 0.45 + 0.4 * absf(sin((age - BLINK_AT) * 14.0))
+	var blink_at := lifetime - BLINK_WINDOW
+	if age >= blink_at:
+		modulate.a = 0.45 + 0.4 * absf(sin((age - blink_at) * 14.0))
 	queue_redraw()
 
 

@@ -4,8 +4,7 @@ extends Area2D
 ## Patrolling enemy. Stomp from above kills it (player bounces);
 ## touching it from the side or below kills the player.
 
-const SPEED := 130.0
-
+var speed := 130.0  # set by TerrainSpawner.enemy_speed_for(); ramps late-game
 var left_x := 0.0
 var right_x := 0.0
 var dir := -1.0
@@ -34,7 +33,7 @@ func _process(delta: float) -> void:
 	queue_redraw()
 	if dying:
 		return
-	position.x += SPEED * dir * delta
+	position.x += speed * dir * delta
 	if position.x < left_x:
 		dir = 1.0
 	elif position.x > right_x:

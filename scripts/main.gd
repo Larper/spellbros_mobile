@@ -7,6 +7,20 @@ extends Node2D
 const PLATFORM_COST := 1
 const START_COINS := 3
 const BUILD_COOLDOWN := 0.15
+
+## ---- HARD-MODE SPEED / PLATFORM TUNING ------------------------------------
+## Speed ramps from TerrainSpawner.PHASE_SPEED. The spawner sizes all normal
+## gaps as fractions of run_speed_for(d) (max 0.54*v vs the 0.709*v flat jump
+## reach), so ramp and cap can be pushed without creating unjumpable gaps.
+const BASE_SPEED := 470.0
+const SPEED_RAMP := 1.1   # px/s gained per meter past PHASE_SPEED
+const SPEED_CAP := 820.0
+## Conjured platforms crumble faster late-game: 4.0 s early, shrinking to
+## PLATFORM_LIFE_LATE between PLATFORM_DECAY_START..END meters.
+const PLATFORM_LIFE := 4.0
+const PLATFORM_LIFE_LATE := 2.6
+const PLATFORM_DECAY_START := 300.0
+const PLATFORM_DECAY_END := 600.0
 const CAMERA_LEAD := 288.0  # keeps the wizard ~35% from the left edge
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
 const RESTART_LOCKOUT_MS := 600.0
@@ -90,8 +104,13 @@ func _physics_process(delta: float) -> void:
 
 func run_speed_for(d: float) -> float:
 	if d < TerrainSpawner.PHASE_SPEED:
-		return 470.0
-	return minf(470.0 + (d - TerrainSpawner.PHASE_SPEED) * 0.9, 780.0)
+		return BASE_SPEED
+	return minf(BASE_SPEED + (d - TerrainSpawner.PHASE_SPEED) * SPEED_RAMP, SPEED_CAP)
+
+
+func platform_life_for(d: float) -> float:
+	var f := clampf((d - PLATFORM_DECAY_START) / (PLATFORM_DECAY_END - PLATFORM_DECAY_START), 0.0, 1.0)
+	return lerpf(PLATFORM_LIFE, PLATFORM_LIFE_LATE, f)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -135,6 +154,7 @@ func _try_build(world_pos: Vector2) -> void:
 	build_cooldown = BUILD_COOLDOWN
 	audio.play("build")
 	var plat := BuiltPlatform.new()
+	plat.lifetime = platform_life_for(distance_m)
 	plat.global_position = world_pos.snapped(Vector2(20.0, 20.0))
 	add_child(plat)
 
