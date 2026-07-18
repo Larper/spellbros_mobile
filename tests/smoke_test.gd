@@ -69,18 +69,21 @@ func _run_tests() -> void:
 
 	# difficulty phase probes: 40 chunks per distance band
 	print("TEST phases (40 chunks each):")
-	for d: float in [20.0, 60.0, 100.0, 160.0, 350.0]:
+	for d: float in [20.0, 60.0, 100.0, 160.0, 350.0, 550.0]:
 		var s := _probe(d, 40)
-		print("  d=%4dm  mega=%2d  enemies=%2d  maxPerChunk=%d  climbChunks=%2d  minTopY=%4d" % [
-			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"], int(s["min_top"])])
+		print("  d=%4dm  mega=%2d  enemies=%2d  maxPerChunk=%d  climbChunks=%2d  voids=%2d  pillars=%2d  minTopY=%4d" % [
+			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
+			s["voids"], s["pillars"], int(s["min_top"])])
 	print("  expect: d=20 all zeros | d=60 mega~14+ enemies=0 | d=100 enemies>0 climb=0")
-	print("  expect: d=160 climbChunks>0 minTopY<650 | d=350 more enemies | maxPerChunk<=2")
+	print("  expect: d=160 climbChunks>0 minTopY<650 | d=350 more enemies, maxPerChunk<=2")
+	print("  expect: d=550 mostly voids, some pillars, no mega/enemies/climb")
 	quit()
 
 
 func _probe(d: float, n: int) -> Dictionary:
 	main.distance_m = d
-	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0, "min_top": 9999.0}
+	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
+			"voids": 0, "pillars": 0, "min_top": 9999.0}
 	for i in range(n):
 		# pin the spawn cursor so every sampled chunk sits at exactly d meters
 		main.spawner.next_x = d * 100.0 + main.start_x
@@ -91,5 +94,9 @@ func _probe(d: float, n: int) -> Dictionary:
 		stats["max_entities"] = maxi(stats["max_entities"], int(s["entities"]))
 		if s["climb"] != 0:
 			stats["climbs"] += 1
+		if s["void"]:
+			stats["voids"] += 1
+		if s["pillar"]:
+			stats["pillars"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 	return stats

@@ -8,6 +8,9 @@ extends Node2D
 ##   120 m+  climb waves: terrain staircases up beyond jump height, then back down
 ##   190 m+  run speed ramps (constant used by Main)
 ##   260 m+  enemy swarms: higher chance, up to two per chunk
+##   470 m+  the void: ground mostly vanishes; trails of fragments float in
+##           open sky and must be caught with perfectly placed platforms to
+##           keep the mana economy alive, with a rare pillar as respite
 ## Entity budget: max 2 things (enemies + mana) per chunk, 3 after 400 m,
 ## so mana stays scarce and every fragment matters.
 
@@ -21,6 +24,7 @@ const PHASE_CLIMB := 120.0
 const PHASE_SPEED := 190.0
 const PHASE_SWARM := 260.0
 const PHASE_RICH := 400.0
+const PHASE_VOID := 470.0
 
 const BASE_Y_MIN := 690.0
 const BASE_Y_MAX := 970.0
@@ -35,6 +39,9 @@ var rng := RandomNumberGenerator.new()
 var climb_dir := 0
 var climb_steps_left := 0
 var flat_chunks_since_wave := 99  # ready for a wave from the start of the phase
+
+# void phase: height the fragment trail wanders around
+var void_y := START_GROUND_Y - 120.0
 
 
 func _ready() -> void:
@@ -69,6 +76,9 @@ func _spawn_chunk() -> Dictionary:
 	var d: float = (next_x - main.start_x) / 100.0
 	var t := minf(d / 500.0, 1.0)
 	var budget := 3 if d >= PHASE_RICH else 2
+
+	if d >= PHASE_VOID:
+		return _spawn_void_segment()
 
 	_update_climb_state(d)
 
@@ -148,7 +158,43 @@ func _spawn_chunk() -> Dictionary:
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
+		"void": false, "pillar": false,
 	}
+
+
+## The endgame: mostly open sky. Fragment trails must be caught with
+## well-placed platforms to sustain the mana economy; a rare narrow
+## pillar offers solid ground from time to time.
+func _spawn_void_segment() -> Dictionary:
+	void_y = clampf(void_y + rng.randf_range(-140.0, 140.0), 340.0, 800.0)
+
+	if rng.randf() < 0.3:
+		var gap := rng.randf_range(380.0, 560.0)
+		var w := rng.randf_range(220.0, 340.0)
+		var top_y := clampf(void_y + 120.0, 500.0, 940.0)
+		var x := next_x + gap
+		_place_chunk(x, top_y, w)
+		var ents := 0
+		if rng.randf() < 0.7:
+			_place_coin(Vector2(x + w * 0.5, top_y - 60.0))
+			ents = 1
+		next_x = x + w
+		last_top_y = top_y
+		void_y = top_y - 160.0
+		return {"gap": gap, "width": w, "top_y": top_y, "mega": false,
+				"enemies": 0, "entities": ents, "climb": 0,
+				"void": false, "pillar": true}
+
+	var length := rng.randf_range(900.0, 1400.0)
+	var n := int(length / 380.0) + 1
+	for i in range(n):
+		var cx := next_x + length * (float(i) + 0.5) / float(n)
+		var cy := clampf(void_y + rng.randf_range(-70.0, 70.0), 320.0, 820.0)
+		_place_coin(Vector2(cx, cy))
+	next_x += length
+	return {"gap": length, "width": 0.0, "top_y": void_y, "mega": false,
+			"enemies": 0, "entities": n, "climb": 0,
+			"void": true, "pillar": false}
 
 
 func _update_climb_state(d: float) -> void:
