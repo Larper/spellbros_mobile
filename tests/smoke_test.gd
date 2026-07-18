@@ -82,6 +82,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.distance_m = d
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0, "min_top": 9999.0}
 	for i in range(n):
+		# pin the spawn cursor so every sampled chunk sits at exactly d meters
+		main.spawner.next_x = d * 100.0 + main.start_x
 		var s: Dictionary = main.spawner._spawn_chunk()
 		if s["mega"]:
 			stats["mega"] += 1

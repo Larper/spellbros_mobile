@@ -62,8 +62,11 @@ func _process(_delta: float) -> void:
 
 
 ## Spawns one chunk (and its gap before it). Returns stats for tests.
+## Difficulty is gated by where the chunk WILL BE (in meters), not by the
+## player's current distance — chunks spawn ~27 m ahead, so gating on player
+## distance made every phase arrive visibly late.
 func _spawn_chunk() -> Dictionary:
-	var d: float = main.distance_m
+	var d: float = (next_x - main.start_x) / 100.0
 	var t := minf(d / 500.0, 1.0)
 	var budget := 3 if d >= PHASE_RICH else 2
 
@@ -114,8 +117,8 @@ func _spawn_chunk() -> Dictionary:
 		var chance := 0.5 if d >= PHASE_SWARM else 0.35
 		if rng.randf() < chance:
 			enemies = 1
-			if d >= PHASE_SWARM and w > 700.0 and used + 2 <= budget \
-					and rng.randf() < 0.4:
+			if d >= PHASE_SWARM and w > 550.0 and used + 2 <= budget \
+					and rng.randf() < 0.5:
 				enemies = 2
 	enemies = mini(enemies, budget - used)
 	if enemies == 1:
@@ -153,7 +156,7 @@ func _update_climb_state(d: float) -> void:
 		flat_chunks_since_wave += 1
 		# occasional set-piece: needs a breather of flat terrain first
 		if d >= PHASE_CLIMB and last_top_y > 800.0 \
-				and flat_chunks_since_wave >= 5 and rng.randf() < 0.15:
+				and flat_chunks_since_wave >= 5 and rng.randf() < 0.22:
 			climb_dir = -1
 			climb_steps_left = 2 + rng.randi() % 3
 	elif climb_dir == -1:
