@@ -43,6 +43,33 @@ func _run_tests() -> void:
 	main._try_build(Vector2(p.global_position.x + 300.0, 500.0))
 	print("TEST nomana: coins=%d (expect 0, no free platform)" % main.coins)
 
+	# stomp bounty: squishing a blob pays +1 mana and bounces the player
+	main.coins = 2
+	var blob := SpikeBlob.new(0.0, 100.0)
+	blob.global_position = p.global_position + Vector2(0.0, 60.0)
+	main.add_child(blob)
+	p.velocity.y = 300.0  # falling onto it
+	blob._on_body_entered(p)
+	print("TEST stomp: coins=%d (expect 3) blob_dying=%s vel_y=%.0f (expect -880) player_alive=%s" % [
+		main.coins, blob.dying, p.velocity.y, not p.dead])
+	blob.queue_free()
+
+	# side hit still kills: bounty must not make blobs safe to touch
+	var blob2 := SpikeBlob.new(0.0, 100.0)
+	blob2.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(blob2)
+	p.velocity.y = 0.0
+	blob2._on_body_entered(p)
+	print("TEST sidehit: dead=%s (expect true) coins=%d (expect still 3)" % [p.dead, main.coins])
+	blob2.queue_free()
+	# revive for the remaining tests (same run, fresh wizard state)
+	p.dead = false
+	p.collision_mask = 1
+	p.rotation = 0.0
+	p.velocity = Vector2.ZERO
+	main.game_over = false
+	main.hud.over_root.visible = false
+
 	# speed phases: flat until 190 m, then ramps, capped at 780
 	print("TEST speed: d=100 %.0f (expect 470) | d=260 %.0f (expect 533) | d=700 %.0f (expect 780)" % [
 		main.run_speed_for(100.0), main.run_speed_for(260.0), main.run_speed_for(700.0)])

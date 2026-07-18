@@ -1,8 +1,8 @@
 class_name SpikeBlob
 extends Area2D
 
-## Patrolling enemy. Stomp from above kills it (player bounces);
-## touching it from the side or below kills the player.
+## Patrolling enemy. Stomp from above kills it (player bounces and earns
+## +1 mana bounty); touching it from the side or below kills the player.
 
 const SPEED := 130.0
 
@@ -61,6 +61,10 @@ func _squash(p: Player) -> void:
 	var main = get_tree().get_first_node_in_group("main")
 	if main:
 		main.audio.play("squish")
+		# Stomp bounty: enemies count against the same entity budget as
+		# crystals, so a brave stomp IS the chunk's mana income.
+		main.add_coin()
+		main.float_text(global_position, "+1", Color("52e5ff"))
 	var tw := create_tween()
 	tw.tween_property(self, "scale", Vector2(1.5, 0.15), 0.12)
 	tw.parallel().tween_property(self, "modulate:a", 0.0, 0.18)
