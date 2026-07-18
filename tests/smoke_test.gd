@@ -44,7 +44,7 @@ func _run_tests() -> void:
 	print("TEST nomana: coins=%d (expect 0, no free platform)" % main.coins)
 
 	# speed phases: flat until 190 m, then ramps, capped at 780
-	print("TEST speed: d=100 %.0f (expect 390) | d=260 %.0f (expect 453) | d=700 %.0f (expect 780)" % [
+	print("TEST speed: d=100 %.0f (expect 470) | d=260 %.0f (expect 533) | d=700 %.0f (expect 780)" % [
 		main.run_speed_for(100.0), main.run_speed_for(260.0), main.run_speed_for(700.0)])
 
 	# pause freezes the world, resume unfreezes it

@@ -15,7 +15,7 @@ const COYOTE_TIME := 0.12
 const JUMP_BUFFER := 0.12
 const STOMP_BOUNCE := -880.0
 
-var run_speed := 390.0
+var run_speed := 470.0
 var dead := false
 var coyote := 0.0
 var jump_buffer := 0.0

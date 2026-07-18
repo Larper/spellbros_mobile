@@ -81,8 +81,8 @@ func _physics_process(delta: float) -> void:
 
 func run_speed_for(d: float) -> float:
 	if d < TerrainSpawner.PHASE_SPEED:
-		return 390.0
-	return minf(390.0 + (d - TerrainSpawner.PHASE_SPEED) * 0.9, 780.0)
+		return 470.0
+	return minf(470.0 + (d - TerrainSpawner.PHASE_SPEED) * 0.9, 780.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
