@@ -8,6 +8,7 @@ const PLATFORM_COST := 1
 const START_COINS := 3
 const BUILD_COOLDOWN := 0.15
 const CAMERA_LEAD := 288.0  # keeps the wizard ~35% from the left edge
+const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
 const RESTART_LOCKOUT_MS := 600.0
 
 static var session_best := 0.0
@@ -68,7 +69,15 @@ func _physics_process(delta: float) -> void:
 			player.die()
 
 	if not player.dead:
-		cam.global_position.x = player.global_position.x + CAMERA_LEAD
+		# The camera never waits: it holds the lead while the player keeps
+		# pace, but keeps rolling if they get stuck (e.g. wedged under a
+		# pillar) — get unstuck or be crushed against the screen edge.
+		var pace_x := player.global_position.x + CAMERA_LEAD
+		var auto_x := cam.global_position.x + player.run_speed * CAMERA_CHASE * delta
+		cam.global_position.x = maxf(auto_x, pace_x)
+		var half_w := get_viewport().get_visible_rect().size.x * 0.5
+		if player.global_position.x < cam.global_position.x - half_w - 30.0:
+			player.die()
 	var target_y := clampf(player.global_position.y - 150.0, 150.0, 760.0)
 	cam.global_position.y = lerpf(cam.global_position.y, target_y, 1.0 - pow(0.002, delta))
 

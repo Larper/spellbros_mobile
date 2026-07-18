@@ -63,8 +63,12 @@ func _run_tests() -> void:
 		main.audio.players.size(), main.audio.music.stream.get_length(),
 		main.audio.music.stream.loop_mode == AudioStreamWAV.LOOP_FORWARD])
 
-	# let the run play out to a natural death
-	await create_timer(12.0).timeout
+	# stall crush: a player stuck behind the advancing camera dies
+	p.global_position.x = main.cam.global_position.x - 1300.0
+	await create_timer(0.3).timeout
+	print("TEST crush: dead=%s game_over=%s (expect true true)" % [p.dead, main.game_over])
+
+	await create_timer(1.0).timeout
 	print("TEST endrun: game_over=%s distance=%dm" % [main.game_over, int(main.distance_m)])
 
 	# difficulty phase probes: 40 chunks per distance band
