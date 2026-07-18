@@ -223,4 +223,8 @@ func _place_chunk(x: float, top_y: float, w: float) -> void:
 func _place_coin(pos: Vector2) -> void:
 	var coin := ManaCrystal.new()
 	coin.position = pos
+	# rare golden crystal: worth 3 mana (expected crystal value 1.0 -> 1.2,
+	# so the economy stays tight but every spawn has jackpot potential)
+	if rng.randf() < 0.1:
+		coin.make_golden()
 	add_child(coin)
