@@ -1,0 +1,9 @@
+# Godot 4 generated files
+.godot/
+
+# Android build artifacts (added later by export setup)
+android/
+
+# OS junk
+Thumbs.db
+.DS_Store
