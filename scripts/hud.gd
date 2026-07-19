@@ -8,7 +8,6 @@ extends CanvasLayer
 
 var score_label: Label
 var coin_label: Label
-var spring_label: Label
 var hint_label: Label
 var no_mana_label: Label
 var pause_button: Button
@@ -17,6 +16,9 @@ var over_root: Control
 var final_label: Label
 var best_label: Label
 var restart_label: Label
+var menu_root: Control
+var level_list: VBoxContainer
+var banner_label: Label
 
 var _no_mana_tween: Tween
 
@@ -41,18 +43,6 @@ func _ready() -> void:
 	coin_label.offset_top = 28.0
 	coin_label.offset_bottom = 120.0
 	coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-
-	# remaining spring-pad builds, sits right under the mana counter
-	spring_label = _label(36, Color("7dff9a"))
-	spring_label.visible = false
-	root.add_child(spring_label)
-	spring_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	spring_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	spring_label.offset_left = -560.0
-	spring_label.offset_right = -48.0
-	spring_label.offset_top = 124.0
-	spring_label.offset_bottom = 172.0
-	spring_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	hint_label = _label(40, Color(1, 1, 1, 0.9))
 	hint_label.text = "Tap LEFT of your wizard to JUMP  •  Tap RIGHT to BUILD (1 mana)"
@@ -91,6 +81,18 @@ func _ready() -> void:
 	pause_button.pressed.connect(_toggle_pause)
 
 	_build_game_over(root)
+	_build_menu(root)
+
+	# level banner: announces each level as you cross into it
+	banner_label = _label(88, Color("ffd75e"))
+	banner_label.modulate.a = 0.0
+	root.add_child(banner_label)
+	banner_label.set_anchors_preset(Control.PRESET_CENTER)
+	banner_label.offset_left = -800.0
+	banner_label.offset_right = 800.0
+	banner_label.offset_top = -330.0
+	banner_label.offset_bottom = -210.0
+	banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	pause_root = Control.new()
 	pause_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -114,6 +116,8 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if menu_root.visible:
+		return  # the menu owns the screen; only its buttons act
 	if event is InputEventKey and event.pressed and not event.echo \
 			and event.keycode == KEY_P:
 		_toggle_pause()
@@ -125,12 +129,85 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _toggle_pause() -> void:
 	var main = get_tree().get_first_node_in_group("main")
-	if main == null or main.game_over:
+	if main == null or main.game_over or menu_root.visible:
 		return
 	var now := not get_tree().paused
 	get_tree().paused = now
 	pause_root.visible = now
 	pause_button.visible = not now
+
+
+func _build_menu(root: Control) -> void:
+	menu_root = Control.new()
+	menu_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_root.visible = false
+	root.add_child(menu_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.05, 0.03, 0.1, 0.75)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_root.add_child(dim)
+
+	var title := _label(130, Color("8b6cff"))
+	title.text = "SPELLBROS"
+	_center_row(menu_root, title, -430.0, -290.0)
+
+	var sub := _label(40, Color(1, 1, 1, 0.85))
+	sub.text = "Choose your level"
+	_center_row(menu_root, sub, -280.0, -220.0)
+
+	level_list = VBoxContainer.new()
+	level_list.add_theme_constant_override("separation", 18)
+	menu_root.add_child(level_list)
+	level_list.set_anchors_preset(Control.PRESET_CENTER)
+	level_list.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	level_list.grow_vertical = Control.GROW_DIRECTION_BOTH
+	level_list.offset_left = -430.0
+	level_list.offset_right = 430.0
+	level_list.offset_top = -190.0
+
+
+## (Re)build the level buttons for the current unlock state and show the menu.
+func show_menu(unlocked: int) -> void:
+	for c in level_list.get_children():
+		c.queue_free()
+	for i in range(Levels.count()):
+		var b := Button.new()
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(860.0, 92.0)
+		b.add_theme_font_size_override("font_size", 40)
+		if i <= unlocked:
+			var best := Levels.best_for(i)
+			var best_txt := "   best %d m" % best if best > 0 else ""
+			b.text = "%s  —  %d m%s" % [Levels.level_name(i), int(Levels.start_m(i)), best_txt]
+			var idx := i
+			b.pressed.connect(func() -> void:
+				var main = get_tree().get_first_node_in_group("main")
+				if main:
+					main.begin_run(idx))
+		else:
+			b.text = "%s  —  reach %d m to unlock" % [Levels.level_name(i), int(Levels.start_m(i))]
+			b.disabled = true
+		level_list.add_child(b)
+	menu_root.visible = true
+	pause_button.visible = false
+
+
+func hide_menu() -> void:
+	menu_root.visible = false
+	pause_button.visible = true
+
+
+## Big center-screen announcement when a level starts or is unlocked.
+func show_level_banner(text: String) -> void:
+	banner_label.text = text
+	banner_label.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(banner_label, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(1.6)
+	tw.tween_property(banner_label, "modulate:a", 0.0, 0.8)
 
 
 func _build_game_over(root: Control) -> void:
@@ -159,6 +236,21 @@ func _build_game_over(root: Control) -> void:
 	restart_label = _label(44, Color(1, 1, 1, 0.85))
 	restart_label.text = "Tap to try again"
 	_center_row(over_root, restart_label, 120.0, 180.0)
+
+	var levels_button := Button.new()
+	levels_button.text = "LEVELS"
+	levels_button.focus_mode = Control.FOCUS_NONE
+	levels_button.add_theme_font_size_override("font_size", 40)
+	over_root.add_child(levels_button)
+	levels_button.set_anchors_preset(Control.PRESET_CENTER)
+	levels_button.offset_left = -160.0
+	levels_button.offset_right = 160.0
+	levels_button.offset_top = 220.0
+	levels_button.offset_bottom = 300.0
+	levels_button.pressed.connect(func() -> void:
+		var main = get_tree().get_first_node_in_group("main")
+		if main:
+			main.to_menu())
 
 
 func _center_row(parent: Control, l: Label, top: float, bottom: float) -> void:
@@ -189,11 +281,6 @@ func update_coins(n: int) -> void:
 	coin_label.text = "MANA " + str(n)
 
 
-func set_springs(n: int) -> void:
-	spring_label.visible = n > 0
-	spring_label.text = "SPRING x" + str(n)
-
-
 func flash_no_mana() -> void:
 	if _no_mana_tween and _no_mana_tween.is_valid():
 		_no_mana_tween.kill()
@@ -203,9 +290,9 @@ func flash_no_mana() -> void:
 	_no_mana_tween.tween_property(no_mana_label, "modulate:a", 0.0, 0.6)
 
 
-func show_game_over(score: int, best: int) -> void:
+func show_game_over(score: int, best: int, from_name: String) -> void:
 	final_label.text = "Distance: " + str(score) + " m"
-	best_label.text = "Session best: " + str(best) + " m"
+	best_label.text = "Best from %s: %d m" % [from_name, best]
 	pause_button.visible = false
 	over_root.visible = true
 	var tw := create_tween().set_loops()

@@ -4,8 +4,8 @@ extends StaticBody2D
 ## A conjured light-bridge. One-way (jump up through it), crumbles after
 ## LIFETIME seconds with a blink warning. Collision is full-size instantly;
 ## only the visual scales in, so a panic-build under your feet still saves you.
-## With a SpringPickup charge active (see Main) the build comes out as a green
-## SPRING pad that launches the player ~1.6x jump height on landing.
+## During the SPRINGS level (see Main._try_build) every build comes out as a
+## green SPRING pad that launches the player ~1.6x jump height on landing.
 
 const SIZE := Vector2(240.0, 24.0)
 const BLINK_WINDOW := 1.2  # blink warning starts this long before crumbling

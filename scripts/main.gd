@@ -35,6 +35,9 @@ const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the p
 const RESTART_LOCKOUT_MS := 600.0
 
 static var session_best := 0.0
+## -1 = show the level-select menu; otherwise the level index to auto-start
+## (kept across scene reloads so death -> tap retries the same level fast)
+static var auto_start_level := -1
 
 var player: Player
 var cam: Camera2D
@@ -43,7 +46,9 @@ var hud: Hud
 var audio: GameAudio
 
 var coins := START_COINS
-var spring_charges := 0  # SpringPickup grants 3: the next builds are spring pads
+var start_level := 0
+var start_offset_m := 0.0  # meters credited for starting at a later level
+var cur_level := 0
 var distance_m := 0.0
 var game_over := false
 var game_over_at := 0.0
@@ -83,14 +88,52 @@ func _ready() -> void:
 	hud.update_coins(coins)
 	hud.update_score(0)
 
+	if auto_start_level >= 0:
+		begin_run(auto_start_level)
+	else:
+		# level-select menu: world stays frozen until a start is chosen
+		hud.show_menu(Levels.load_unlocked())
+		get_tree().paused = true
+
+
+## Start (or restart) the run from the given unlocked level's boundary.
+func begin_run(i: int) -> void:
+	start_level = i
+	cur_level = i
+	start_offset_m = Levels.start_m(i)
+	distance_m = start_offset_m
+	# later starts get a small stake so the level twist is playable on arrival
+	coins = START_COINS if i == 0 else 2 + i
+	hud.update_coins(coins)
+	hud.update_score(int(distance_m))
+	hud.hide_menu()
+	if i > 0:
+		hud.show_level_banner("LEVEL %d: %s" % [i + 1, Levels.level_name(i)])
+	Main.auto_start_level = i
+	get_tree().paused = false
+
+
+## Back to the level-select menu (game-over panel button).
+func to_menu() -> void:
+	Main.auto_start_level = -1
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
 
 func _physics_process(delta: float) -> void:
 	build_cooldown = maxf(0.0, build_cooldown - delta)
 
 	if not game_over:
-		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0)
+		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0 + start_offset_m)
 		player.run_speed = run_speed_for(distance_m)
 		hud.update_score(int(distance_m))
+		# crossing a level boundary unlocks it as a starting point
+		var lv := Levels.level_for(distance_m)
+		if lv > cur_level:
+			cur_level = lv
+			Levels.unlock(lv)
+			hud.show_level_banner("LEVEL %d: %s" % [lv + 1, Levels.level_name(lv)])
+			audio.play("pickup")
 		if player.global_position.y > cam.global_position.y + 710.0:
 			player.die()  # ~280 world px below the zoomed view's bottom edge
 
@@ -202,20 +245,11 @@ func _try_build(world_pos: Vector2) -> void:
 	build_cooldown = BUILD_COOLDOWN
 	audio.play("build")
 	var plat := BuiltPlatform.new()
-	if spring_charges > 0:
-		spring_charges -= 1
-		plat.bouncy = true
-		hud.set_springs(spring_charges)
+	# SPRINGS level: every build in its band is a launcher pad
+	plat.bouncy = Levels.level_for(distance_m) == 1
 	plat.lifetime = platform_life_for(distance_m)
 	plat.global_position = world_pos.snapped(Vector2(20.0, 20.0))
 	add_child(plat)
-
-
-func add_springs(n: int) -> void:
-	if game_over:
-		return
-	spring_charges += n
-	hud.set_springs(spring_charges)
 
 
 func add_coin(amount: int = 1) -> void:
@@ -253,4 +287,6 @@ func _on_player_died() -> void:
 	audio.stop_music()
 	audio.play("death")
 	session_best = maxf(session_best, distance_m)
-	hud.show_game_over(int(distance_m), int(session_best))
+	Levels.save_best(start_level, int(distance_m))
+	hud.show_game_over(int(distance_m), Levels.best_for(start_level),
+			Levels.level_name(start_level))

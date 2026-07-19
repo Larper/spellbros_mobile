@@ -2,7 +2,9 @@ class_name TerrainSpawner
 extends Node2D
 
 ## Endless procedural terrain with staged difficulty phases (HARD tuning —
-## see PHASE_* constants for the exact meters):
+## see PHASE_* constants for the exact meters). The Levels ladder overlays
+## themed bands on top: SPRINGS (100-200, frequent climb waves + every build
+## a launcher) and BLOB BRIDGES (200-300, _spawn_bridge_chunk). Phases:
 ##   PHASE_BUILD   mega gaps appear that require building
 ##   PHASE_ENEMY   enemies start to spawn
 ##   PHASE_CLIMB   climb waves: terrain staircases up beyond jump height
@@ -112,13 +114,17 @@ func _process(_delta: float) -> void:
 ## player's current distance — chunks spawn ~27 m ahead, so gating on player
 ## distance made every phase arrive visibly late.
 func _spawn_chunk() -> Dictionary:
-	var d: float = (next_x - main.start_x) / 100.0
+	# start_offset_m credits the meters skipped when starting at a later level
+	var d: float = (next_x - main.start_x) / 100.0 + main.start_offset_m
 	var t := minf(d / 500.0, 1.0)
 	var v: float = main.run_speed_for(d)
 	var budget := 3 if d >= PHASE_RICH else 2
 
 	if d >= PHASE_VOID:
 		return _spawn_void_segment()
+
+	if Levels.level_for(d) == 2:
+		return _spawn_bridge_chunk(d, v, budget)
 
 	_update_climb_state(d)
 
@@ -209,20 +215,53 @@ func _spawn_chunk() -> Dictionary:
 		used += 1
 		stars = 1
 
-	# rare spring powerup (endgame): 3 spring-pad builds, placed reachable
-	var springs := 0
-	if d >= PHASE_RICH and used < budget and rng.randf() < 0.08:
-		_place_spring(Vector2(x + rng.randf_range(100.0, w - 100.0), top_y - 120.0))
-		used += 1
-		springs = 1
-
 	var rise := maxf(0.0, last_top_y - top_y)
 	next_x = x + w
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
-		"void": false, "pillar": false, "stars": stars, "springs": springs,
+		"void": false, "pillar": false, "stars": stars,
+		"rise": rise, "speed": v,
+	}
+
+
+## BLOB BRIDGES level (200-300 m): sparse pillars split by gaps wider than
+## any jump, with drifting sky blobs hovering over each gap. Chain stomps to
+## cross (each stomp refreshes the air jump and pays the +1 bounty) — or
+## spend 1 mana to bridge the old-fashioned way.
+func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
+	var gap := rng.randf_range(0.75 * v, 1.05 * v)
+	var w := rng.randf_range(280.0, 400.0)
+	var top_y := clampf(last_top_y + rng.randf_range(-60.0, 60.0), BASE_Y_MIN, BASE_Y_MAX)
+	var x := next_x + gap
+	_place_chunk(x, top_y, w)
+
+	# stepping-stone blobs, one per jump-length of gap, at stomp height
+	var blobs := 1 if gap < 0.9 * v else 2
+	blobs = mini(blobs, budget)
+	var deck_y := minf(last_top_y, top_y)
+	var seg := gap / float(blobs)
+	for j in range(blobs):
+		var left := next_x + seg * float(j) + 60.0
+		var right := next_x + seg * float(j + 1) - 60.0
+		var b := SpikeBlob.new(left, right)
+		b.position = Vector2((left + right) * 0.5, deck_y - 90.0)
+		b.speed = enemy_speed_for(d)
+		add_child(b)
+
+	var used := blobs
+	if used < budget and rng.randf() < 0.5:
+		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
+		used += 1
+
+	var rise := maxf(0.0, last_top_y - top_y)
+	next_x = x + w
+	last_top_y = top_y
+	return {
+		"gap": gap, "width": w, "top_y": top_y, "mega": false,
+		"enemies": blobs, "entities": used, "climb": 0,
+		"void": false, "pillar": false, "bridge": true, "stars": 0,
 		"rise": rise, "speed": v,
 	}
 
@@ -231,7 +270,7 @@ func _spawn_chunk() -> Dictionary:
 ## well-placed platforms to sustain the mana economy; a rare narrow
 ## pillar offers solid ground from time to time.
 func _spawn_void_segment() -> Dictionary:
-	var d: float = (next_x - main.start_x) / 100.0
+	var d: float = (next_x - main.start_x) / 100.0 + main.start_offset_m
 	var v: float = main.run_speed_for(d)
 	void_y = clampf(void_y + rng.randf_range(-140.0, 140.0), 340.0, 800.0)
 
@@ -245,18 +284,12 @@ func _spawn_void_segment() -> Dictionary:
 		if rng.randf() < 0.7:
 			_place_coin(Vector2(x + w * 0.5, top_y - 60.0))
 			ents = 1
-		# pillars are the void's only solid ground, so springs land here too
-		var springs := 0
-		if rng.randf() < 0.2:
-			_place_spring(Vector2(x + w * 0.5, top_y - 150.0))
-			ents += 1
-			springs = 1
 		next_x = x + w
 		last_top_y = top_y
 		void_y = top_y - 160.0
 		return {"gap": gap, "width": w, "top_y": top_y, "mega": false,
 				"enemies": 0, "entities": ents, "climb": 0,
-				"void": false, "pillar": true, "stars": 0, "springs": springs,
+				"void": false, "pillar": true, "stars": 0,
 				"rise": 0.0, "speed": v}
 
 	var length := rng.randf_range(900.0, 1500.0)
@@ -268,16 +301,21 @@ func _spawn_void_segment() -> Dictionary:
 	next_x += length
 	return {"gap": length, "width": 0.0, "top_y": void_y, "mega": false,
 			"enemies": 0, "entities": n, "climb": 0,
-			"void": true, "pillar": false, "stars": 0, "springs": 0,
+			"void": true, "pillar": false, "stars": 0,
 			"rise": 0.0, "speed": v}
 
 
 func _update_climb_state(d: float) -> void:
 	if climb_dir == 0:
 		flat_chunks_since_wave += 1
-		# occasional set-piece: needs a breather of flat terrain first
+		# occasional set-piece: needs a breather of flat terrain first.
+		# The SPRINGS level doubles down on verticality: waves come more
+		# often and with barely a breather, since every build launches.
+		var springs_lv := Levels.level_for(d) == 1
+		var chance := 0.5 if springs_lv else CLIMB_CHANCE
+		var cooldown := 2 if springs_lv else CLIMB_COOLDOWN
 		if d >= PHASE_CLIMB and last_top_y > 800.0 \
-				and flat_chunks_since_wave >= CLIMB_COOLDOWN and rng.randf() < CLIMB_CHANCE:
+				and flat_chunks_since_wave >= cooldown and rng.randf() < chance:
 			climb_dir = -1
 			climb_steps_left = 2 + rng.randi() % 3
 	elif climb_dir == -1:
@@ -306,12 +344,6 @@ func _place_star(pos: Vector2) -> void:
 	var star := StarPickup.new()
 	star.position = pos
 	add_child(star)
-
-
-func _place_spring(pos: Vector2) -> void:
-	var spring := SpringPickup.new()
-	spring.position = pos
-	add_child(spring)
 
 
 func _place_coin(pos: Vector2) -> void:

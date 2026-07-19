@@ -28,10 +28,35 @@ func _check(ok: bool, label: String) -> void:
 
 
 func _run_tests() -> void:
+	await create_timer(0.3).timeout
+	# boot: the level menu owns the screen, world frozen until a start is chosen
+	print("TEST menu: visible=%s paused=%s (expect true true)" % [
+		main.hud.menu_root.visible, paused])
+	_check(main.hud.menu_root.visible and paused, "menu on boot")
+	main.begin_run(0)
+	print("TEST beginrun: paused=%s coins=%d menu=%s (expect false 0 false)" % [
+		paused, main.coins, main.hud.menu_root.visible])
+	_check(not paused and main.coins == 0 and not main.hud.menu_root.visible, "begin run")
+
 	await create_timer(1.0).timeout
 	var p = main.player
 	print("TEST setup: player=%s on_floor=%s coins=%d (expect %d = START_COINS)" % [p != null, p.is_on_floor(), main.coins, main.START_COINS])
 	_check(p != null and main.coins == main.START_COINS, "setup")
+
+	# level ladder mapping + unlock/best persistence (on a scratch save file)
+	var map_ok: bool = Levels.level_for(0.0) == 0 and Levels.level_for(99.0) == 0 \
+			and Levels.level_for(100.0) == 1 and Levels.level_for(250.0) == 2 \
+			and Levels.level_for(340.0) == 3 and Levels.level_for(500.0) == 4
+	var real_path: String = Levels.save_path
+	Levels.save_path = "user://test_progress.cfg"
+	Levels.unlock(2)
+	Levels.save_best(1, 234)
+	Levels.save_best(1, 100)  # a worse run must not overwrite the best
+	var persist_ok: bool = Levels.load_unlocked() == 2 and Levels.best_for(1) == 234
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_progress.cfg"))
+	Levels.save_path = real_path
+	print("TEST levels: map_ok=%s persist_ok=%s (expect true true)" % [map_ok, persist_ok])
+	_check(map_ok and persist_ok, "levels api")
 
 	# build a platform ahead of the wizard (seed mana; the run now starts at 0)
 	main.coins = 3
@@ -174,34 +199,26 @@ func _run_tests() -> void:
 	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.air_jumps == 0,
 			"star of levity")
 
-	# spring powerup: pickup grants 3 spring builds (1 mana each), 4th is normal
-	var spr := SpringPickup.new()
-	spr.global_position = p.global_position
-	main.add_child(spr)
-	spr._on_body_entered(p)
-	print("TEST springgrant: charges=%d (expect 3) hud=%s (expect true)" % [
-		main.spring_charges, main.hud.spring_label.visible])
-	_check(main.spring_charges == 3 and main.hud.spring_label.visible, "spring grant")
-	main.coins = 4
-	for i in range(4):
-		main.build_cooldown = 0.0
-		main._try_build(Vector2(p.global_position.x + 3000.0 + 300.0 * float(i), 300.0))
-	# the cadence pads are the 4 newest platforms (children keep add order)
+	# SPRINGS level: builds inside 100-200 m are launcher pads, outside not
+	main.distance_m = 120.0
+	main.coins = 2
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 3000.0, 300.0))
+	main.distance_m = 20.0
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 3300.0, 300.0))
 	var all_pads := []
 	for c in main.get_children():
 		if c is BuiltPlatform:
 			all_pads.append(c)
-	var pads: Array = all_pads.slice(all_pads.size() - 4)
-	var flags := []
-	for pad in pads:
-		flags.append(pad.bouncy)
-	print("TEST springcadence: flags=%s (expect [true, true, true, false]) coins=%d (expect 0) hud=%s (expect false)" % [
-		flags, main.coins, main.hud.spring_label.visible])
-	_check(flags == [true, true, true, false] and main.coins == 0 \
-			and not main.hud.spring_label.visible, "spring cadence")
+	var pad_in: BuiltPlatform = all_pads[all_pads.size() - 2]
+	var pad_out: BuiltPlatform = all_pads[all_pads.size() - 1]
+	print("TEST springlevel: in-band bouncy=%s (expect true) outside=%s (expect false) coins=%d (expect 0)" % [
+		pad_in.bouncy, pad_out.bouncy, main.coins])
+	_check(pad_in.bouncy and not pad_out.bouncy and main.coins == 0, "springs level builds")
 
 	# spring launch: landing on a pad flings the player harder than a jump
-	var pad0: BuiltPlatform = pads[0]
+	var pad0: BuiltPlatform = pad_in
 	pad0.age = 0.0  # fresh lifetime so it cannot crumble mid-test
 	p.global_position = pad0.global_position + Vector2(-80.0, -70.0)
 	p.velocity = Vector2.ZERO
@@ -273,17 +290,17 @@ func _run_tests() -> void:
 
 	# difficulty phase probes + beatability audit: 80 chunks per distance band
 	print("TEST phases (80 chunks each):")
-	print("  band     mega enem maxEnt climb void pilr star sprg  minTop  pace  gap/reach mana/ch builds/ch  bad")
-	for d: float in [15.0, 45.0, 80.0, 130.0, 190.0, 280.0, 380.0, 550.0]:
+	print("  band     mega enem maxEnt climb void pilr star brdg  minTop  pace  gap/reach mana/ch builds/ch  bad")
+	for d: float in [15.0, 45.0, 80.0, 130.0, 250.0, 340.0, 500.0]:
 		var s := _probe(d, 80)
 		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], s["stars"], s["springs"], int(s["min_top"]), s["pace"],
+			s["voids"], s["pillars"], s["stars"], s["bridge"], int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
 		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) or s["voids"] > 0,
 				"entity budget at d=%d" % int(d))
-	# phase-shape expectations, derived from the PHASE_* constants so they
+	# level/phase-shape expectations, derived from the constants so they
 	# stay valid while tuning configs
 	var pre := _probe(TerrainSpawner.PHASE_BUILD - 10.0, 80)
 	_check(pre["mega"] == 0 and pre["enemies"] == 0 and pre["climbs"] == 0, "pre-phase calm")
@@ -292,22 +309,20 @@ func _run_tests() -> void:
 	_check(early["mega"] >= 20 and early["enemies"] == 0, "megas live before enemies")
 	var mid := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 80)
 	_check(mid["enemies"] > 0 and mid["climbs"] == 0, "enemies live before climbs")
-	var climbb := _probe(TerrainSpawner.PHASE_CLIMB + 30.0, 80)
-	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
-	# compare enemies per ELIGIBLE chunk (climb waves carry no enemies and
-	# would dilute a raw count into a coin flip)
-	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
+	# SPRINGS level band (100-200): dense climb waves to exploit spring builds
+	var climbb := _probe(Levels.start_m(1) + 30.0, 80)
+	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live in springs band")
+	# BLOB BRIDGES band (200-300): every chunk a bridge, blobs as stepping stones
+	var bridgeb := _probe(Levels.start_m(2) + 50.0, 80)
+	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 80 and bridgeb["climbs"] == 0,
+			"blob bridges band")
+	# OUTLANDS (300+): standard late game — swarm density, then the void
+	# (enemies per ELIGIBLE chunk; climb waves carry none and dilute raw counts)
+	var swarm := _probe(Levels.start_m(3) + 40.0, 80)
 	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
-	# Star of Levity spawns are rare but 240 post-enemy chunks make 0 near-impossible
 	_check(mid["stars"] + climbb["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
-	# spring powerup: none before PHASE_RICH, present in the rich band and void pillars
-	_check(pre["springs"] + early["springs"] + mid["springs"] + climbb["springs"] \
-			+ swarm["springs"] == 0, "no springs pre-rich")
-	var richb := _probe(TerrainSpawner.PHASE_RICH + 40.0, 80)
-	_check(richb["springs"] > 0, "springs spawn after 300 m")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
-	_check(voidb["springs"] > 0, "springs on void pillars")
 
 	print("SMOKE RESULT: %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	quit(0 if fails == 0 else 1)
@@ -322,7 +337,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
-			"voids": 0, "pillars": 0, "stars": 0, "springs": 0, "min_top": 9999.0, "bad": 0,
+			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -345,16 +360,22 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["pillar"]:
 			stats["pillars"] += 1
 		stats["stars"] += s["stars"]
-		stats["springs"] += s["springs"]
+		if s.get("bridge", false):
+			stats["bridge"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
 		span += s["gap"] + s["width"]
-		stats["mana"] += float(s["entities"] - s["enemies"] - s["stars"] - s["springs"])
+		stats["mana"] += float(s["entities"] - s["enemies"] - s["stars"])
 		# --- beatability audit ---
 		var one_build := 1.418 * v + 240.0  # jump + platform deck + jump
 		if s["void"]:
 			stats["builds"] += ceilf(s["gap"] / one_build)
+		elif s.get("bridge", false):
+			# stomp-chain is the intended crossing; one build is the fallback
+			stats["builds"] += 1.0
+			if s["gap"] > one_build:
+				stats["bad"] += 1
 		elif s["climb"] == -1:
 			stats["builds"] += 1.0  # each up-stair is one platform
 		elif s["mega"]:
