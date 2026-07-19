@@ -111,6 +111,31 @@ func _run_tests() -> void:
 	main.game_over = false
 	main.hud.over_root.visible = false
 
+	# park the wizard on a fresh platform so the star test starts grounded
+	main.coins = 5
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 200.0, 700.0))
+	p.global_position = Vector2(p.global_position.x + 200.0, 640.0)
+	p.velocity = Vector2.ZERO
+	await create_timer(0.1).timeout
+
+	# Star of Levity: pickup stores one air jump; tapping mid-air spends it
+	var star := StarPickup.new()
+	star.global_position = p.global_position
+	main.add_child(star)
+	star._on_body_entered(p)
+	var granted: int = p.air_jumps
+	p.global_position.y -= 500.0
+	p.velocity = Vector2.ZERO
+	await create_timer(0.3).timeout  # fall until floor state and coyote expire
+	var airborne: bool = not p.is_on_floor() and p.coyote <= 0.0
+	p.try_jump()
+	await create_timer(0.1).timeout
+	print("TEST star: granted=%d (expect 1) airborne=%s (expect true) vel_y=%.0f (expect < -500) charges_left=%d (expect 0)" % [
+		granted, airborne, p.velocity.y, p.air_jumps])
+	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.air_jumps == 0,
+			"star of levity")
+
 	# speed: flat before PHASE_SPEED, then ramps at SPEED_RAMP, capped
 	var s0: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED - 10.0)
 	var s1: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED + 100.0)
@@ -165,12 +190,12 @@ func _run_tests() -> void:
 
 	# difficulty phase probes + beatability audit: 80 chunks per distance band
 	print("TEST phases (80 chunks each):")
-	print("  band     mega enem maxEnt climb void pilr  minTop  pace  gap/reach mana/ch builds/ch  bad")
+	print("  band     mega enem maxEnt climb void pilr star  minTop  pace  gap/reach mana/ch builds/ch  bad")
 	for d: float in [15.0, 45.0, 80.0, 130.0, 190.0, 280.0, 380.0, 550.0]:
 		var s := _probe(d, 80)
-		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
+		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], int(s["min_top"]), s["pace"],
+			s["voids"], s["pillars"], s["stars"], int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
 		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) or s["voids"] > 0,
@@ -179,6 +204,7 @@ func _run_tests() -> void:
 	# stay valid while tuning configs
 	var pre := _probe(TerrainSpawner.PHASE_BUILD - 10.0, 80)
 	_check(pre["mega"] == 0 and pre["enemies"] == 0 and pre["climbs"] == 0, "pre-phase calm")
+	_check(pre["stars"] == 0, "no stars pre-enemy")
 	var early := _probe((TerrainSpawner.PHASE_BUILD + TerrainSpawner.PHASE_ENEMY) * 0.5, 80)
 	_check(early["mega"] >= 20 and early["enemies"] == 0, "megas live before enemies")
 	var mid := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 80)
@@ -189,6 +215,8 @@ func _run_tests() -> void:
 	# would dilute a raw count into a coin flip)
 	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
 	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
+	# Star of Levity spawns are rare but 240 post-enemy chunks make 0 near-impossible
+	_check(mid["stars"] + climbb["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 
@@ -205,7 +233,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
-			"voids": 0, "pillars": 0, "min_top": 9999.0, "bad": 0,
+			"voids": 0, "pillars": 0, "stars": 0, "min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -227,11 +255,12 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["voids"] += 1
 		if s["pillar"]:
 			stats["pillars"] += 1
+		stats["stars"] += s["stars"]
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
 		span += s["gap"] + s["width"]
-		stats["mana"] += float(s["entities"] - s["enemies"])
+		stats["mana"] += float(s["entities"] - s["enemies"] - s["stars"])
 		# --- beatability audit ---
 		var one_build := 1.418 * v + 240.0  # jump + platform deck + jump
 		if s["void"]:

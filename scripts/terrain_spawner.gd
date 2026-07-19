@@ -201,13 +201,21 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
 		used += 1
 
+	# rare Star of Levity: a stored air-jump, hung high to invite a leap.
+	# Competes for the same entity budget so it never inflates the economy.
+	var stars := 0
+	if d >= PHASE_ENEMY and used < budget and rng.randf() < 0.08:
+		_place_star(Vector2(x + rng.randf_range(100.0, w - 100.0), top_y - 280.0))
+		used += 1
+		stars = 1
+
 	var rise := maxf(0.0, last_top_y - top_y)
 	next_x = x + w
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
-		"void": false, "pillar": false, "rise": rise, "speed": v,
+		"void": false, "pillar": false, "stars": stars, "rise": rise, "speed": v,
 	}
 
 
@@ -234,7 +242,7 @@ func _spawn_void_segment() -> Dictionary:
 		void_y = top_y - 160.0
 		return {"gap": gap, "width": w, "top_y": top_y, "mega": false,
 				"enemies": 0, "entities": ents, "climb": 0,
-				"void": false, "pillar": true, "rise": 0.0, "speed": v}
+				"void": false, "pillar": true, "stars": 0, "rise": 0.0, "speed": v}
 
 	var length := rng.randf_range(900.0, 1500.0)
 	var n := int(length / 380.0) + 1
@@ -245,7 +253,7 @@ func _spawn_void_segment() -> Dictionary:
 	next_x += length
 	return {"gap": length, "width": 0.0, "top_y": void_y, "mega": false,
 			"enemies": 0, "entities": n, "climb": 0,
-			"void": true, "pillar": false, "rise": 0.0, "speed": v}
+			"void": true, "pillar": false, "stars": 0, "rise": 0.0, "speed": v}
 
 
 func _update_climb_state(d: float) -> void:
@@ -276,6 +284,12 @@ func _place_chunk(x: float, top_y: float, w: float) -> void:
 	var chunk := GroundChunk.new(w)
 	chunk.position = Vector2(x, top_y)
 	add_child(chunk)
+
+
+func _place_star(pos: Vector2) -> void:
+	var star := StarPickup.new()
+	star.position = pos
+	add_child(star)
 
 
 func _place_coin(pos: Vector2) -> void:
