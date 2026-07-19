@@ -150,23 +150,37 @@ func _build_menu(root: Control) -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_root.add_child(dim)
 
-	var title := _label(130, Color("8b6cff"))
+	# top-anchored layout: title, subtitle, then the list growing downward,
+	# so the first (playable) button can never end up off-screen
+	var title := _label(120, Color("8b6cff"))
 	title.text = "SPELLBROS"
-	_center_row(menu_root, title, -430.0, -290.0)
+	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	menu_root.add_child(title)
+	title.offset_left = -700.0
+	title.offset_right = 700.0
+	title.offset_top = 30.0
+	title.offset_bottom = 170.0
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	var sub := _label(40, Color(1, 1, 1, 0.85))
 	sub.text = "Choose your level"
-	_center_row(menu_root, sub, -280.0, -220.0)
+	sub.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	menu_root.add_child(sub)
+	sub.offset_left = -700.0
+	sub.offset_right = 700.0
+	sub.offset_top = 180.0
+	sub.offset_bottom = 240.0
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	level_list = VBoxContainer.new()
-	level_list.add_theme_constant_override("separation", 18)
+	level_list.add_theme_constant_override("separation", 16)
 	menu_root.add_child(level_list)
-	level_list.set_anchors_preset(Control.PRESET_CENTER)
+	level_list.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	level_list.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	level_list.grow_vertical = Control.GROW_DIRECTION_BOTH
+	level_list.grow_vertical = Control.GROW_DIRECTION_END
 	level_list.offset_left = -430.0
 	level_list.offset_right = 430.0
-	level_list.offset_top = -190.0
+	level_list.offset_top = 270.0
 
 
 ## (Re)build the level buttons for the current unlock state and show the menu.

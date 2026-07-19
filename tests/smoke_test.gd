@@ -14,6 +14,9 @@ var fails := 0
 
 
 func _initialize() -> void:
+	# scratch save: keeps tests deterministic and never touches real progress
+	Levels.save_path = "user://smoke_progress.cfg"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Levels.save_path))
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	main = packed.instantiate()
 	root.add_child(main)
@@ -29,19 +32,25 @@ func _check(ok: bool, label: String) -> void:
 
 func _run_tests() -> void:
 	await create_timer(0.3).timeout
-	# boot: the level menu owns the screen, world frozen until a start is chosen
-	print("TEST menu: visible=%s paused=%s (expect true true)" % [
-		main.hud.menu_root.visible, paused])
-	_check(main.hud.menu_root.visible and paused, "menu on boot")
-	main.begin_run(0)
-	print("TEST beginrun: paused=%s coins=%d menu=%s (expect false 0 false)" % [
-		paused, main.coins, main.hud.menu_root.visible])
-	_check(not paused and main.coins == 0 and not main.hud.menu_root.visible, "begin run")
-
-	await create_timer(1.0).timeout
+	# first launch (nothing unlocked): no menu, the run starts immediately
+	print("TEST boot: menu=%s paused=%s coins=%d (expect false false 0)" % [
+		main.hud.menu_root.visible, paused, main.coins])
+	_check(not main.hud.menu_root.visible and not paused and main.coins == 0,
+			"first launch runs immediately")
+	# setup, checked before the wizard reaches the first teaching crystal
 	var p = main.player
 	print("TEST setup: player=%s on_floor=%s coins=%d (expect %d = START_COINS)" % [p != null, p.is_on_floor(), main.coins, main.START_COINS])
 	_check(p != null and main.coins == main.START_COINS, "setup")
+	# the menu itself (reached via game over / later launches): one row per level
+	main.hud.show_menu(1)
+	var rows: int = main.hud.level_list.get_child_count()
+	var menu_ok: bool = main.hud.menu_root.visible and rows == Levels.count()
+	main.hud.hide_menu()
+	print("TEST menu: rows=%d (expect %d) shown_then_hidden=%s" % [
+		rows, Levels.count(), menu_ok and not main.hud.menu_root.visible])
+	_check(menu_ok and not main.hud.menu_root.visible, "menu rows")
+
+	await create_timer(1.0).timeout
 
 	# level ladder mapping + unlock/best persistence (on a scratch save file)
 	var map_ok: bool = Levels.level_for(0.0) == 0 and Levels.level_for(99.0) == 0 \

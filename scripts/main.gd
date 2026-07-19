@@ -90,6 +90,9 @@ func _ready() -> void:
 
 	if auto_start_level >= 0:
 		begin_run(auto_start_level)
+	elif Levels.load_unlocked() == 0:
+		# nothing unlocked yet = no choice to offer: straight into the run
+		begin_run(0)
 	else:
 		# level-select menu: world stays frozen until a start is chosen
 		hud.show_menu(Levels.load_unlocked())
