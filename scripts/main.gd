@@ -22,7 +22,11 @@ const PLATFORM_LIFE := 4.0
 const PLATFORM_LIFE_LATE := 2.4
 const PLATFORM_DECAY_START := 300.0
 const PLATFORM_DECAY_END := 600.0
-const CAMERA_LEAD := 288.0  # keeps the wizard ~35% from the left edge
+## Camera crop: zoom 1.25 -> visible world is 1536x864 (half 768x432), so the
+## wizard reads bigger on a phone. The lead pushes him to ~22% from the left
+## edge: what's behind him is dead space, what's ahead is the game.
+const CAMERA_ZOOM := 1.25
+const CAMERA_LEAD := 430.0  # world px ahead of the wizard the camera centers on
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
 const RESTART_LOCKOUT_MS := 600.0
 
@@ -64,6 +68,7 @@ func _ready() -> void:
 
 	cam = Camera2D.new()
 	cam.global_position = Vector2(player.global_position.x + CAMERA_LEAD, 620.0)
+	cam.zoom = Vector2(CAMERA_ZOOM, CAMERA_ZOOM)
 	add_child(cam)
 	cam.make_current()
 
@@ -80,8 +85,8 @@ func _physics_process(delta: float) -> void:
 		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0)
 		player.run_speed = run_speed_for(distance_m)
 		hud.update_score(int(distance_m))
-		if player.global_position.y > cam.global_position.y + 820.0:
-			player.die()
+		if player.global_position.y > cam.global_position.y + 710.0:
+			player.die()  # ~280 world px below the zoomed view's bottom edge
 
 	if not player.dead:
 		# The camera never waits: it holds the lead while the player keeps
@@ -90,7 +95,7 @@ func _physics_process(delta: float) -> void:
 		var pace_x := player.global_position.x + CAMERA_LEAD
 		var auto_x := cam.global_position.x + player.run_speed * CAMERA_CHASE * delta
 		cam.global_position.x = maxf(auto_x, pace_x)
-		var half_w := get_viewport().get_visible_rect().size.x * 0.5
+		var half_w := get_viewport().get_visible_rect().size.x * 0.5 / CAMERA_ZOOM
 		if player.global_position.x < cam.global_position.x - half_w - 30.0:
 			player.die()
 	cam.global_position.y = lerpf(cam.global_position.y, camera_target_y(), 1.0 - pow(0.002, delta))
@@ -110,7 +115,9 @@ func camera_target_y() -> float:
 	var target := player.global_position.y - 60.0
 	var ahead := _lowest_ground_ahead()
 	if ahead > 0.0:
-		target = maxf(target, minf(ahead - 450.0, player.global_position.y + 300.0))
+		# 360/240 keep the same screen fractions the pre-zoom 450/300 gave the
+		# full-height view (visible half-height is now 432, not 540)
+		target = maxf(target, minf(ahead - 360.0, player.global_position.y + 240.0))
 	return clampf(target, 150.0, 920.0)
 
 
