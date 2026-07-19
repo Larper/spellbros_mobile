@@ -89,10 +89,21 @@ func _run_tests() -> void:
 	var left_jumps: bool = p.jump_buffer > 0.0
 	main.coins = 1
 	main.build_cooldown = 0.0
-	main._handle_tap(Vector2(wiz_x + 300.0, 500.0))
+	var tap_screen := Vector2(wiz_x + 300.0, 500.0)
+	main._handle_tap(tap_screen)
 	print("TEST taproute: left_jumps=%s (expect true) coins=%d (expect 0, right tap built)" % [
 		left_jumps, main.coins])
 	_check(left_jumps and main.coins == 0, "tap routing")
+	# thumb compensation: the platform lands BUILD_TOUCH_NUDGE left of the tap
+	var tap_world: Vector2 = main.get_canvas_transform().affine_inverse() * tap_screen
+	var newest: BuiltPlatform = null
+	for c in main.get_children():
+		if c is BuiltPlatform:
+			newest = c
+	var nudge_err: float = absf(newest.global_position.x - (tap_world.x - main.BUILD_TOUCH_NUDGE))
+	print("TEST buildnudge: plat_x=%.0f tap_x=%.0f err=%.0f (expect <= 10 = snap grid)" % [
+		newest.global_position.x, tap_world.x, nudge_err])
+	_check(nudge_err <= 10.001, "build nudge left")
 	p.jump_buffer = 0.0
 
 	# stomp bounty: squishing a blob pays +1 mana and bounces the player

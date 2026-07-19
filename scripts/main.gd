@@ -7,6 +7,10 @@ extends Node2D
 const PLATFORM_COST := 1
 const START_COINS := 0
 const BUILD_COOLDOWN := 0.15
+## Thumbs are imprecise and tend to land right of where the player aims, so
+## every touch-build is nudged this many world px left of the tap (~one thumb
+## width at the current zoom). Tuning knob from Neven's phone playtests.
+const BUILD_TOUCH_NUDGE := 90.0
 
 ## ---- HARD-MODE SPEED / PLATFORM TUNING ------------------------------------
 ## Speed ramps from TerrainSpawner.PHASE_SPEED. The spawner sizes all normal
@@ -170,6 +174,7 @@ func _handle_tap(screen_pos: Vector2) -> void:
 		player.try_jump()
 	else:
 		var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos
+		world_pos.x -= BUILD_TOUCH_NUDGE
 		_try_build(world_pos)
 
 
