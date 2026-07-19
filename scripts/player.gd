@@ -23,6 +23,7 @@ var coyote := 0.0
 var jump_buffer := 0.0
 var time_alive := 0.0
 var air_jumps := 0  # Star of Levity charge: one stored mid-air jump
+var stomp_jump := false  # stomping an enemy refreshes one jump until landing
 
 
 func _init() -> void:
@@ -50,12 +51,19 @@ func _physics_process(delta: float) -> void:
 
 	if is_on_floor():
 		coyote = COYOTE_TIME
+		stomp_jump = false
 	else:
 		coyote -= delta
 
 	if jump_buffer > 0.0 and coyote > 0.0:
 		velocity.y = JUMP_VELOCITY
 		coyote = 0.0
+		jump_buffer = 0.0
+		jumped.emit()
+	elif jump_buffer > 0.0 and stomp_jump and not is_on_floor():
+		# free refresh from a stomp — consumed before a precious star charge
+		velocity.y = JUMP_VELOCITY
+		stomp_jump = false
 		jump_buffer = 0.0
 		jumped.emit()
 	elif jump_buffer > 0.0 and air_jumps > 0 and not is_on_floor():
@@ -85,6 +93,7 @@ func try_jump() -> void:
 
 func bounce() -> void:
 	velocity.y = STOMP_BOUNCE
+	stomp_jump = true
 
 
 func die() -> void:
