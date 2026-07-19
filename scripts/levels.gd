@@ -12,20 +12,18 @@ const DEFS := [
 	{"name": "SPRINGS", "start": 300.0},
 	{"name": "BLOB BRIDGES", "start": 600.0},
 	{"name": "FLIPSIDE", "start": 900.0},
-	{"name": "STROBE", "start": 1200.0},
-	{"name": "UMBRA", "start": 1500.0},
-	{"name": "SPELLBROS", "start": 1800.0},
-	{"name": "THE VOID", "start": 2100.0},
+	{"name": "UMBRA", "start": 1200.0},
+	{"name": "SPELLBROS", "start": 1500.0},
+	{"name": "THE VOID", "start": 1800.0},
 ]
 
 # indices, for readable level checks across the codebase
 const SPRINGS := 1
 const BRIDGES := 2
 const FLIPSIDE := 3
-const STROBE := 4
-const UMBRA := 5
-const BROS := 6
-const VOID := 7
+const UMBRA := 4
+const BROS := 5
+const VOID := 6
 
 ## var (not const) so tests can point saves at a scratch file
 static var save_path := "user://progress.cfg"

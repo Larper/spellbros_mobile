@@ -57,10 +57,9 @@ func _run_tests() -> void:
 			and Levels.level_for(300.0) == Levels.SPRINGS \
 			and Levels.level_for(650.0) == Levels.BRIDGES \
 			and Levels.level_for(1000.0) == Levels.FLIPSIDE \
-			and Levels.level_for(1300.0) == Levels.STROBE \
-			and Levels.level_for(1600.0) == Levels.UMBRA \
-			and Levels.level_for(1900.0) == Levels.BROS \
-			and Levels.level_for(2200.0) == Levels.VOID
+			and Levels.level_for(1300.0) == Levels.UMBRA \
+			and Levels.level_for(1600.0) == Levels.BROS \
+			and Levels.level_for(1900.0) == Levels.VOID
 	var real_path: String = Levels.save_path
 	Levels.save_path = "user://test_progress.cfg"
 	Levels.unlock(2)
@@ -272,33 +271,8 @@ func _run_tests() -> void:
 	_check(flipped and still_flipped and righted \
 			and not flip_pad._cs.one_way_collision, "flipside")
 
-	# STROBE: pure beat math, and a live chunk obeying the ghost clock
-	var beat := 60.0 / GameAudio.BPM
-	var idx_ok: bool = Main.strobe_beat_index(0.5 * beat) == 0 \
-			and Main.strobe_beat_index(3.5 * beat) == 3 \
-			and Main.strobe_beat_index(4.2 * beat) == 0
-	var sc := GroundChunk.new(300.0)
-	sc.strobe = true
-	# ahead of the camera: behind it the spawner's cleanup would free it mid-test
-	sc.position = Vector2(p.global_position.x + 4000.0, 200.0)
-	main.spawner.add_child(sc)
-	sc.set_process(false)  # drive its _process by hand with a forced clock
-	Main.strobe_ghost = true
-	Main.strobe_warn = false
-	sc._process(0.016)
-	await create_timer(0.05).timeout  # deferred collision toggle lands
-	var ghost_ok: bool = sc._cs.disabled and sc.modulate.a < 0.3
-	Main.strobe_ghost = false
-	sc._process(0.016)
-	await create_timer(0.05).timeout
-	var solid_ok: bool = not sc._cs.disabled and sc.modulate.a > 0.9
-	sc.queue_free()
-	print("TEST strobe: beat_math=%s ghost=%s resolid=%s (expect all true)" % [
-		idx_ok, ghost_ok, solid_ok])
-	_check(idx_ok and ghost_ok and solid_ok, "strobe ghost clock")
-
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
-	main.distance_m = 1600.0
+	main.distance_m = 1300.0
 	main.psy._process(0.016)
 	var dark_ok: bool = main.psy.color.v < 0.4
 	main.coins = 1
@@ -312,7 +286,7 @@ func _run_tests() -> void:
 	for c in lantern.get_children():
 		if c is PointLight2D:
 			lantern_lit = true
-	main.spawner._place_coin(Vector2(main.start_x + 1600.0 * 100.0, -8500.0))
+	main.spawner._place_coin(Vector2(main.start_x + 1300.0 * 100.0, -8500.0))
 	var beacon := false
 	for c in main.spawner.get_children():
 		if c is ManaCrystal and c.position.y < -8000.0:
@@ -325,7 +299,7 @@ func _run_tests() -> void:
 	_check(dark_ok and lantern_lit and beacon, "umbra darkness")
 
 	# SPELLBROS: the echo brother activates, mirrors, and banks crystals
-	main.distance_m = 1900.0
+	main.distance_m = 1600.0
 	p.set_physics_process(false)  # hold the wizard still so the bro stays put
 	await create_timer(0.1).timeout
 	var bro_on: bool = main.bro.active and main.bro.visible
@@ -401,12 +375,12 @@ func _run_tests() -> void:
 
 	# level-band probes + beatability audit: 80 chunks per distance band
 	print("TEST phases (80 chunks each):")
-	print("  band     mega enem maxEnt climb void pilr star brdg flip strb  minTop  pace  gap/reach mana/ch builds/ch  bad")
-	for d: float in [15.0, 45.0, 80.0, 130.0, 230.0, 350.0, 700.0, 1000.0, 1300.0, 1600.0, 1900.0, 2200.0]:
+	print("  band     mega enem maxEnt climb void pilr star brdg flip  minTop  pace  gap/reach mana/ch builds/ch  bad")
+	for d: float in [15.0, 45.0, 80.0, 130.0, 230.0, 350.0, 700.0, 1000.0, 1300.0, 1600.0, 1900.0]:
 		var s := _probe(d, 80)
-		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
+		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], s["stars"], s["bridge"], s["flip"], s["strobe"],
+			s["voids"], s["pillars"], s["stars"], s["bridge"], s["flip"],
 			int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
@@ -436,9 +410,6 @@ func _run_tests() -> void:
 	# FLIPSIDE band: all corridor chunks, no enemies, ceilings cover every gap
 	var flipb := _probe(Levels.start_m(Levels.FLIPSIDE) + 50.0, 80)
 	_check(flipb["flip"] == 80 and flipb["enemies"] == 0, "flipside corridor band")
-	# STROBE band: every chunk beat-gated, rhythm is the only enemy
-	var strobeb := _probe(Levels.start_m(Levels.STROBE) + 50.0, 80)
-	_check(strobeb["strobe"] == 80 and strobeb["enemies"] == 0, "strobe band")
 	# UMBRA and SPELLBROS run the standard generator (their twists live in
 	# lighting and the echo bro); the band loop above already audits them
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
@@ -458,7 +429,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"strobe": 0, "min_top": 9999.0, "bad": 0,
+			"min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -485,8 +456,6 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["bridge"] += 1
 		if s.get("flip", false):
 			stats["flip"] += 1
-		if s.get("strobe", false):
-			stats["strobe"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1

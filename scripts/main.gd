@@ -32,15 +32,16 @@ const PLATFORM_DECAY_END := 600.0
 const CAMERA_ZOOM := 1.25
 const CAMERA_LEAD := 430.0  # world px ahead of the wizard the camera centers on
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
+## The stall-crush never advances faster than base-speed pressure (0.85*470):
+## at capped run speed the chase would otherwise eat the reaction window
+## before a missed stair jump can be answered with a build.
+const CAMERA_CHASE_CAP := 400.0
 const RESTART_LOCKOUT_MS := 600.0
 
 static var session_best := 0.0
 ## -1 = show the level-select menu; otherwise the level index to auto-start
 ## (kept across scene reloads so death -> tap retries the same level fast)
 static var auto_start_level := -1
-## STROBE clock, read by every strobing GroundChunk (solid 3 beats, ghost 4th)
-static var strobe_ghost := false
-static var strobe_warn := false
 
 var player: Player
 var cam: Camera2D
@@ -141,11 +142,6 @@ func to_menu() -> void:
 func _physics_process(delta: float) -> void:
 	build_cooldown = maxf(0.0, build_cooldown - delta)
 
-	# STROBE clock: solid on beat indices 0-2, warn on 2, ghost on 3
-	var bi := strobe_beat_index(psy.t)
-	Main.strobe_ghost = bi == 3
-	Main.strobe_warn = bi == 2
-
 	if not game_over:
 		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0 + start_offset_m)
 		player.run_speed = run_speed_for(distance_m)
@@ -172,7 +168,8 @@ func _physics_process(delta: float) -> void:
 		# pace, but keeps rolling if they get stuck (e.g. wedged under a
 		# pillar) — get unstuck or be crushed against the screen edge.
 		var pace_x := player.global_position.x + CAMERA_LEAD
-		var auto_x := cam.global_position.x + player.run_speed * CAMERA_CHASE * delta
+		var chase := minf(player.run_speed * CAMERA_CHASE, CAMERA_CHASE_CAP)
+		var auto_x := cam.global_position.x + chase * delta
 		cam.global_position.x = maxf(auto_x, pace_x)
 		var half_w := get_viewport().get_visible_rect().size.x * 0.5 / CAMERA_ZOOM
 		if player.global_position.x < cam.global_position.x - half_w - 30.0:
@@ -211,11 +208,6 @@ func _lowest_ground_ahead() -> float:
 		if g.position.x <= px + 700.0 and g.position.x + g.width >= px:
 			lowest = maxf(lowest, g.position.y)
 	return lowest
-
-
-## Position in the 4-beat strobe bar for a given music time (pure, testable).
-static func strobe_beat_index(time: float) -> int:
-	return int(time / (60.0 / GameAudio.BPM)) % 4
 
 
 func run_speed_for(d: float) -> float:

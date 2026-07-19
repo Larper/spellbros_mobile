@@ -25,7 +25,7 @@ const PHASE_CLIMB := 85.0
 const PHASE_SPEED := 110.0
 const PHASE_SWARM := 170.0
 const PHASE_RICH := 300.0
-const PHASE_VOID := 2100.0  # the endgame after the SPELLBROS level
+const PHASE_VOID := 1800.0  # the endgame after the SPELLBROS level
 
 const FLIP_CORRIDOR := 560.0  # floor-to-ceiling height in the FLIPSIDE level
 
@@ -167,9 +167,7 @@ func _spawn_chunk() -> Dictionary:
 	var top_y := clampf(last_top_y + dy, y_min, BASE_Y_MAX)
 
 	var x := next_x + gap
-	# STROBE level: ground obeys the beat (solid 3 beats, ghost on the 4th)
-	var strobe := lv == Levels.STROBE
-	_place_chunk(x, top_y, w, strobe)
+	_place_chunk(x, top_y, w)
 
 	var used := 0
 
@@ -178,10 +176,9 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
 		used += 1
 
-	# enemies (never on climb stairs — those are about building; never in
-	# STROBE either, where the rhythm itself is the enemy)
+	# enemies (never on climb stairs — those are about building)
 	var enemies := 0
-	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not strobe:
+	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
 		if rng.randf() < chance:
 			enemies = 1
@@ -229,7 +226,7 @@ func _spawn_chunk() -> Dictionary:
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
-		"void": false, "pillar": false, "stars": stars, "strobe": strobe,
+		"void": false, "pillar": false, "stars": stars,
 		"rise": rise, "speed": v,
 	}
 
@@ -372,10 +369,9 @@ func enemy_speed_for(d: float) -> float:
 	return lerpf(ENEMY_SPEED_BASE, ENEMY_SPEED_MAX, f)
 
 
-func _place_chunk(x: float, top_y: float, w: float, strobe := false) -> void:
+func _place_chunk(x: float, top_y: float, w: float) -> void:
 	var chunk := GroundChunk.new(w)
 	chunk.position = Vector2(x, top_y)
-	chunk.strobe = strobe
 	add_child(chunk)
 
 
