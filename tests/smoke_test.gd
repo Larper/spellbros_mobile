@@ -62,19 +62,18 @@ func _run_tests() -> void:
 	print("TEST stompjump: vel %.0f -> %.0f (expect falling, then jump < -700)" % [fall_vel, p.velocity.y])
 	_check(p.velocity.y < -700.0, "stompjump")
 
-	# camera looks down while falling (descending-staircase visibility);
-	# pin the wizard at a mid-screen height so the clamp floor stays out of it
-	var vy_saved: float = p.velocity.y
+	# camera eases down when the terrain ahead sits lower (next-pillar visibility)
 	var y_saved: float = p.global_position.y
-	p.global_position.y = 800.0
-	p.velocity.y = 0.0
-	var t_level: float = main.camera_target_y()
-	p.velocity.y = 900.0
-	var t_fall: float = main.camera_target_y()
-	p.velocity.y = vy_saved
+	p.global_position.y = 500.0
+	var t_flat: float = main.camera_target_y()
+	var low_chunk := GroundChunk.new(300.0)
+	low_chunk.position = Vector2(p.global_position.x + 300.0, 1500.0)
+	main.spawner.add_child(low_chunk)
+	var t_low: float = main.camera_target_y()
+	low_chunk.queue_free()
 	p.global_position.y = y_saved
-	print("TEST camfall: target level %.0f, falling %.0f (expect falling >= 200 px lower)" % [t_level, t_fall])
-	_check(t_fall - t_level >= 200.0, "camera fall bias")
+	print("TEST camahead: target flat %.0f, low pillar ahead %.0f (expect >= 200 px lower)" % [t_flat, t_low])
+	_check(t_low - t_flat >= 200.0, "camera pillar lookdown")
 
 	# no-mana path must refuse to build
 	main.coins = 0
