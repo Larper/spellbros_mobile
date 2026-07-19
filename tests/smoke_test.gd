@@ -51,6 +51,16 @@ func _run_tests() -> void:
 	print("TEST jump: y %.0f -> %.0f (expect lower value = rose)" % [y_before, p.global_position.y])
 	_check(p.global_position.y < y_before, "jump")
 
+	# stomp refresh: bouncing off an enemy grants one air jump until landing
+	p.global_position.y -= 400.0
+	p.bounce()
+	await create_timer(0.3).timeout
+	var fall_vel: float = p.velocity.y
+	p.try_jump()
+	await create_timer(0.1).timeout
+	print("TEST stompjump: vel %.0f -> %.0f (expect falling, then jump < -700)" % [fall_vel, p.velocity.y])
+	_check(p.velocity.y < -700.0, "stompjump")
+
 	# no-mana path must refuse to build
 	main.coins = 0
 	main.build_cooldown = 0.0
