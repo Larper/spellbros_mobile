@@ -271,6 +271,22 @@ func _run_tests() -> void:
 	_check(flipped and still_flipped and righted \
 			and not flip_pad._cs.one_way_collision, "flipside")
 
+	# no hover-cheese: mid-air, only one banked flip until the next landing
+	p.global_position.y -= 400.0
+	p.velocity = Vector2.ZERO
+	await create_timer(0.25).timeout  # airborne, coyote expired
+	p.flip_cooldown = 0.0
+	p.try_flip()
+	var air_flip_ok: bool = p.gravity_dir < 0.0 and p.air_flips == 0
+	p.flip_cooldown = 0.0
+	p.try_flip()  # bank is empty: must be refused
+	print("TEST flipcheese: first_air_flip=%s second_blocked=%s (expect true true)" % [
+		air_flip_ok, p.gravity_dir < 0.0])
+	_check(air_flip_ok and p.gravity_dir < 0.0, "no flip hover cheese")
+	p.gravity_dir = 1.0
+	p.air_flips = 1
+	p.velocity = Vector2.ZERO
+
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
 	main.distance_m = 1300.0
 	main.psy._process(0.016)

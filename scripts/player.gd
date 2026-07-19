@@ -26,6 +26,7 @@ var air_jumps := 0  # Star of Levity charge: one stored mid-air jump
 var stomp_jump := false  # stomping an enemy refreshes one jump until landing
 var gravity_dir := 1.0  # FLIPSIDE: -1 runs the ceiling; +1 the floor
 var flip_cooldown := 0.0
+var air_flips := 1  # one mid-air flip per airtime: recovery yes, hovering no
 
 
 func _init() -> void:
@@ -56,6 +57,7 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor():
 		coyote = COYOTE_TIME
 		stomp_jump = false
+		air_flips = 1
 	else:
 		coyote -= delta
 
@@ -91,12 +93,18 @@ func try_jump() -> void:
 	jump_buffer = JUMP_BUFFER
 
 
-## FLIPSIDE: invert gravity (works mid-air too — a bad flip is undone by
-## another). Zeroing velocity.y makes the flip read as a crisp direction
-## change instead of a fight against built-up momentum.
+## FLIPSIDE: invert gravity. Flips from a surface (or coyote window) are
+## free; mid-air only ONE flip is banked until the next landing — enough to
+## undo a bad flip, but spamming can't hover across dead zones. Zeroing
+## velocity.y makes the flip read as a crisp direction change instead of a
+## fight against built-up momentum.
 func try_flip() -> void:
 	if flip_cooldown > 0.0 or dead:
 		return
+	if not is_on_floor() and coyote <= 0.0:
+		if air_flips <= 0:
+			return
+		air_flips -= 1
 	gravity_dir = -gravity_dir
 	velocity.y = 0.0
 	flip_cooldown = 0.18
