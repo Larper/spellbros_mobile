@@ -17,13 +17,13 @@ const START_GROUND_Y := 880.0
 const SPAWN_AHEAD := 2400.0
 const CLEANUP_BEHIND := 1400.0
 
-const PHASE_BUILD := 30.0
-const PHASE_ENEMY := 60.0
-const PHASE_CLIMB := 100.0
-const PHASE_SPEED := 150.0
-const PHASE_SWARM := 220.0
-const PHASE_RICH := 350.0
-const PHASE_VOID := 430.0
+const PHASE_BUILD := 25.0
+const PHASE_ENEMY := 50.0
+const PHASE_CLIMB := 85.0
+const PHASE_SPEED := 110.0
+const PHASE_SWARM := 170.0
+const PHASE_RICH := 300.0
+const PHASE_VOID := 380.0
 
 ## ---- HARD-MODE GAP TUNING -------------------------------------------------
 ## Jump math (Player: GRAVITY 3300, JUMP_VELOCITY -1170):
@@ -33,10 +33,10 @@ const PHASE_VOID := 430.0
 ##     R = 150 -> t = 0.541 s -> reach = 0.541 * v
 ## Normal gaps are sized as FRACTIONS of the live run speed so they stay
 ## jumpable at every point of the speed ramp:
-##   GAP_MAX_FRAC 0.54 < 0.709 flat reach          (24% margin, flat landings)
+##   GAP_MAX_FRAC 0.56 < 0.709 flat reach          (21% margin, flat landings)
 ##   gaps wider than GAP_RISE_FRAC 0.46 never rise (0.46 < 0.541 rising reach)
-const GAP_MIN_FRAC := 0.32
-const GAP_MAX_FRAC := 0.54
+const GAP_MIN_FRAC := 0.34
+const GAP_MAX_FRAC := 0.56
 const GAP_RISE_FRAC := 0.46
 const GAP_MAX_RISE := 150.0
 ## Mega gaps: wider than the 0.709*v flat reach, so they always demand a
@@ -44,16 +44,16 @@ const GAP_MAX_RISE := 150.0
 ## which exceeds MEGA_MAX_FRAC * v for any speed -> always 1-mana solvable.
 const MEGA_MIN_FRAC := 0.85
 const MEGA_MAX_FRAC := 1.45
-const MEGA_CHANCE_BASE := 0.5
-const MEGA_CHANCE_MAX := 0.65
-const DOUBLE_MEGA_CHANCE := 0.35  # from PHASE_SWARM a mega can chain a second
+const MEGA_CHANCE_BASE := 0.55
+const MEGA_CHANCE_MAX := 0.7
+const DOUBLE_MEGA_CHANCE := 0.45  # from PHASE_SWARM a mega can chain a second
 
-const ENEMY_CHANCE := 0.45
-const SWARM_CHANCE := 0.7
-const SWARM_DOUBLE := 0.6
+const ENEMY_CHANCE := 0.55
+const SWARM_CHANCE := 0.8
+const SWARM_DOUBLE := 0.7
 const ENEMY_MIN_W := 420.0
 const ENEMY_SPEED_BASE := 130.0
-const ENEMY_SPEED_MAX := 230.0    # blobs patrol faster from PHASE_SWARM on
+const ENEMY_SPEED_MAX := 260.0    # blobs patrol faster from PHASE_SWARM on
 const ENEMY_SPEED_RAMP_END := 500.0
 
 const CLIMB_CHANCE := 0.3

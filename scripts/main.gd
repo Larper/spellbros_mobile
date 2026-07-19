@@ -10,15 +10,16 @@ const BUILD_COOLDOWN := 0.15
 
 ## ---- HARD-MODE SPEED / PLATFORM TUNING ------------------------------------
 ## Speed ramps from TerrainSpawner.PHASE_SPEED. The spawner sizes all normal
-## gaps as fractions of run_speed_for(d) (max 0.54*v vs the 0.709*v flat jump
+## gaps as fractions of run_speed_for(d) (max 0.56*v vs the 0.709*v flat jump
 ## reach), so ramp and cap can be pushed without creating unjumpable gaps.
+## Ramp 1.5/m from 110 m hits the 900 cap at ~397 m, just before the void.
 const BASE_SPEED := 470.0
-const SPEED_RAMP := 1.1   # px/s gained per meter past PHASE_SPEED
-const SPEED_CAP := 820.0
+const SPEED_RAMP := 1.5   # px/s gained per meter past PHASE_SPEED
+const SPEED_CAP := 900.0
 ## Conjured platforms crumble faster late-game: 4.0 s early, shrinking to
 ## PLATFORM_LIFE_LATE between PLATFORM_DECAY_START..END meters.
 const PLATFORM_LIFE := 4.0
-const PLATFORM_LIFE_LATE := 2.6
+const PLATFORM_LIFE_LATE := 2.4
 const PLATFORM_DECAY_START := 300.0
 const PLATFORM_DECAY_END := 600.0
 const CAMERA_LEAD := 288.0  # keeps the wizard ~35% from the left edge

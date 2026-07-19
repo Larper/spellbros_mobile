@@ -132,8 +132,10 @@ func _run_tests() -> void:
 	_check(mid["enemies"] > 0 and mid["climbs"] == 0, "enemies live before climbs")
 	var climbb := _probe(TerrainSpawner.PHASE_CLIMB + 30.0, 80)
 	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
+	# compare enemies per ELIGIBLE chunk (climb waves carry no enemies and
+	# would dilute a raw count into a coin flip)
 	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
-	_check(swarm["enemies"] > mid["enemies"], "swarms denser than early enemies")
+	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 
@@ -151,10 +153,12 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "min_top": 9999.0, "bad": 0,
-			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0}
+			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
+			"enemy_rate": 0.0}
 	var span := 0.0
 	var ratio_sum := 0.0
 	var ratio_n := 0
+	var eligible := 0
 	for i in range(n):
 		# pin the spawn cursor so every sampled chunk sits at exactly d meters
 		main.spawner.next_x = d * 100.0 + main.start_x
@@ -171,6 +175,8 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["pillar"]:
 			stats["pillars"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
+		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
+			eligible += 1
 		span += s["gap"] + s["width"]
 		stats["mana"] += float(s["entities"] - s["enemies"])
 		# --- beatability audit ---
@@ -198,4 +204,5 @@ func _probe(d: float, n: int) -> Dictionary:
 	stats["gap_ratio"] = ratio_sum / maxf(float(ratio_n), 1.0)
 	stats["mana"] = stats["mana"] / float(n)
 	stats["builds"] = stats["builds"] / float(n)
+	stats["enemy_rate"] = float(stats["enemies"]) / maxf(float(eligible), 1.0)
 	return stats
