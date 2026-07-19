@@ -8,6 +8,7 @@ extends CanvasLayer
 
 var score_label: Label
 var coin_label: Label
+var spring_label: Label
 var hint_label: Label
 var no_mana_label: Label
 var pause_button: Button
@@ -40,6 +41,18 @@ func _ready() -> void:
 	coin_label.offset_top = 28.0
 	coin_label.offset_bottom = 120.0
 	coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	# remaining spring-pad builds, sits right under the mana counter
+	spring_label = _label(36, Color("7dff9a"))
+	spring_label.visible = false
+	root.add_child(spring_label)
+	spring_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	spring_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	spring_label.offset_left = -560.0
+	spring_label.offset_right = -48.0
+	spring_label.offset_top = 124.0
+	spring_label.offset_bottom = 172.0
+	spring_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	hint_label = _label(40, Color(1, 1, 1, 0.9))
 	hint_label.text = "Tap LEFT of your wizard to JUMP  •  Tap RIGHT to BUILD (1 mana)"
@@ -174,6 +187,11 @@ func update_score(m: int) -> void:
 
 func update_coins(n: int) -> void:
 	coin_label.text = "MANA " + str(n)
+
+
+func set_springs(n: int) -> void:
+	spring_label.visible = n > 0
+	spring_label.text = "SPRING x" + str(n)
 
 
 func flash_no_mana() -> void:

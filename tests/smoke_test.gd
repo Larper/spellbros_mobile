@@ -174,6 +174,51 @@ func _run_tests() -> void:
 	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.air_jumps == 0,
 			"star of levity")
 
+	# spring powerup: pickup grants 3 spring builds (1 mana each), 4th is normal
+	var spr := SpringPickup.new()
+	spr.global_position = p.global_position
+	main.add_child(spr)
+	spr._on_body_entered(p)
+	print("TEST springgrant: charges=%d (expect 3) hud=%s (expect true)" % [
+		main.spring_charges, main.hud.spring_label.visible])
+	_check(main.spring_charges == 3 and main.hud.spring_label.visible, "spring grant")
+	main.coins = 4
+	for i in range(4):
+		main.build_cooldown = 0.0
+		main._try_build(Vector2(p.global_position.x + 3000.0 + 300.0 * float(i), 300.0))
+	# the cadence pads are the 4 newest platforms (children keep add order)
+	var all_pads := []
+	for c in main.get_children():
+		if c is BuiltPlatform:
+			all_pads.append(c)
+	var pads: Array = all_pads.slice(all_pads.size() - 4)
+	var flags := []
+	for pad in pads:
+		flags.append(pad.bouncy)
+	print("TEST springcadence: flags=%s (expect [true, true, true, false]) coins=%d (expect 0) hud=%s (expect false)" % [
+		flags, main.coins, main.hud.spring_label.visible])
+	_check(flags == [true, true, true, false] and main.coins == 0 \
+			and not main.hud.spring_label.visible, "spring cadence")
+
+	# spring launch: landing on a pad flings the player harder than a jump
+	var pad0: BuiltPlatform = pads[0]
+	pad0.age = 0.0  # fresh lifetime so it cannot crumble mid-test
+	p.global_position = pad0.global_position + Vector2(-80.0, -70.0)
+	p.velocity = Vector2.ZERO
+	var min_vy := 0.0
+	for i in range(12):
+		await create_timer(0.05).timeout
+		min_vy = minf(min_vy, p.velocity.y)
+	print("TEST springlaunch: min_vel_y=%.0f (expect <= -1200, stronger than jump -1170)" % min_vy)
+	_check(min_vy <= -1200.0, "spring launch")
+	# park the wizard back on a fresh normal platform for the remaining tests
+	main.coins = 5
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 200.0, 700.0))
+	p.global_position = Vector2(p.global_position.x + 200.0, 640.0)
+	p.velocity = Vector2.ZERO
+	await create_timer(0.1).timeout
+
 	# speed: flat before PHASE_SPEED, then ramps at SPEED_RAMP, capped
 	var s0: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED - 10.0)
 	var s1: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED + 100.0)
@@ -211,11 +256,11 @@ func _run_tests() -> void:
 	print("TEST resume: paused=%s moving=%s (expect false true)" % [paused, moving])
 	_check(not paused and moving, "resume")
 
-	# audio: 5 synthesized SFX plus a looping music track
-	print("TEST audio: sfx=%d (expect 5) music_len=%.1fs (expect ~8.7) looping=%s" % [
+	# audio: 6 synthesized SFX plus a looping music track
+	print("TEST audio: sfx=%d (expect 6) music_len=%.1fs (expect ~8.7) looping=%s" % [
 		main.audio.players.size(), main.audio.music.stream.get_length(),
 		main.audio.music.stream.loop_mode == AudioStreamWAV.LOOP_FORWARD])
-	_check(main.audio.players.size() == 5, "audio")
+	_check(main.audio.players.size() == 6, "audio")
 
 	# stall crush: a player stuck behind the advancing camera dies
 	p.global_position.x = main.cam.global_position.x - 1300.0
@@ -228,12 +273,12 @@ func _run_tests() -> void:
 
 	# difficulty phase probes + beatability audit: 80 chunks per distance band
 	print("TEST phases (80 chunks each):")
-	print("  band     mega enem maxEnt climb void pilr star  minTop  pace  gap/reach mana/ch builds/ch  bad")
+	print("  band     mega enem maxEnt climb void pilr star sprg  minTop  pace  gap/reach mana/ch builds/ch  bad")
 	for d: float in [15.0, 45.0, 80.0, 130.0, 190.0, 280.0, 380.0, 550.0]:
 		var s := _probe(d, 80)
-		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
+		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], s["stars"], int(s["min_top"]), s["pace"],
+			s["voids"], s["pillars"], s["stars"], s["springs"], int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
 		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) or s["voids"] > 0,
@@ -255,8 +300,14 @@ func _run_tests() -> void:
 	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
 	# Star of Levity spawns are rare but 240 post-enemy chunks make 0 near-impossible
 	_check(mid["stars"] + climbb["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
+	# spring powerup: none before PHASE_RICH, present in the rich band and void pillars
+	_check(pre["springs"] + early["springs"] + mid["springs"] + climbb["springs"] \
+			+ swarm["springs"] == 0, "no springs pre-rich")
+	var richb := _probe(TerrainSpawner.PHASE_RICH + 40.0, 80)
+	_check(richb["springs"] > 0, "springs spawn after 300 m")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
+	_check(voidb["springs"] > 0, "springs on void pillars")
 
 	print("SMOKE RESULT: %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	quit(0 if fails == 0 else 1)
@@ -271,7 +322,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
-			"voids": 0, "pillars": 0, "stars": 0, "min_top": 9999.0, "bad": 0,
+			"voids": 0, "pillars": 0, "stars": 0, "springs": 0, "min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -294,11 +345,12 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["pillar"]:
 			stats["pillars"] += 1
 		stats["stars"] += s["stars"]
+		stats["springs"] += s["springs"]
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
 		span += s["gap"] + s["width"]
-		stats["mana"] += float(s["entities"] - s["enemies"] - s["stars"])
+		stats["mana"] += float(s["entities"] - s["enemies"] - s["stars"] - s["springs"])
 		# --- beatability audit ---
 		var one_build := 1.418 * v + 240.0  # jump + platform deck + jump
 		if s["void"]:

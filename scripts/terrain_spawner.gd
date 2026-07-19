@@ -209,13 +209,21 @@ func _spawn_chunk() -> Dictionary:
 		used += 1
 		stars = 1
 
+	# rare spring powerup (endgame): 3 spring-pad builds, placed reachable
+	var springs := 0
+	if d >= PHASE_RICH and used < budget and rng.randf() < 0.08:
+		_place_spring(Vector2(x + rng.randf_range(100.0, w - 100.0), top_y - 120.0))
+		used += 1
+		springs = 1
+
 	var rise := maxf(0.0, last_top_y - top_y)
 	next_x = x + w
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
-		"void": false, "pillar": false, "stars": stars, "rise": rise, "speed": v,
+		"void": false, "pillar": false, "stars": stars, "springs": springs,
+		"rise": rise, "speed": v,
 	}
 
 
@@ -237,12 +245,19 @@ func _spawn_void_segment() -> Dictionary:
 		if rng.randf() < 0.7:
 			_place_coin(Vector2(x + w * 0.5, top_y - 60.0))
 			ents = 1
+		# pillars are the void's only solid ground, so springs land here too
+		var springs := 0
+		if rng.randf() < 0.2:
+			_place_spring(Vector2(x + w * 0.5, top_y - 150.0))
+			ents += 1
+			springs = 1
 		next_x = x + w
 		last_top_y = top_y
 		void_y = top_y - 160.0
 		return {"gap": gap, "width": w, "top_y": top_y, "mega": false,
 				"enemies": 0, "entities": ents, "climb": 0,
-				"void": false, "pillar": true, "stars": 0, "rise": 0.0, "speed": v}
+				"void": false, "pillar": true, "stars": 0, "springs": springs,
+				"rise": 0.0, "speed": v}
 
 	var length := rng.randf_range(900.0, 1500.0)
 	var n := int(length / 380.0) + 1
@@ -253,7 +268,8 @@ func _spawn_void_segment() -> Dictionary:
 	next_x += length
 	return {"gap": length, "width": 0.0, "top_y": void_y, "mega": false,
 			"enemies": 0, "entities": n, "climb": 0,
-			"void": true, "pillar": false, "stars": 0, "rise": 0.0, "speed": v}
+			"void": true, "pillar": false, "stars": 0, "springs": 0,
+			"rise": 0.0, "speed": v}
 
 
 func _update_climb_state(d: float) -> void:
@@ -290,6 +306,12 @@ func _place_star(pos: Vector2) -> void:
 	var star := StarPickup.new()
 	star.position = pos
 	add_child(star)
+
+
+func _place_spring(pos: Vector2) -> void:
+	var spring := SpringPickup.new()
+	spring.position = pos
+	add_child(spring)
 
 
 func _place_coin(pos: Vector2) -> void:

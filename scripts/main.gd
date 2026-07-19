@@ -43,6 +43,7 @@ var hud: Hud
 var audio: GameAudio
 
 var coins := START_COINS
+var spring_charges := 0  # SpringPickup grants 3: the next builds are spring pads
 var distance_m := 0.0
 var game_over := false
 var game_over_at := 0.0
@@ -67,6 +68,7 @@ func _ready() -> void:
 	player.global_position = Vector2(260.0, TerrainSpawner.START_GROUND_Y - Player.BODY_H * 0.5)
 	player.died.connect(_on_player_died)
 	player.jumped.connect(func() -> void: audio.play("jump"))
+	player.sprung.connect(func() -> void: audio.play("boing"))
 	add_child(player)
 	start_x = player.global_position.x
 
@@ -200,9 +202,20 @@ func _try_build(world_pos: Vector2) -> void:
 	build_cooldown = BUILD_COOLDOWN
 	audio.play("build")
 	var plat := BuiltPlatform.new()
+	if spring_charges > 0:
+		spring_charges -= 1
+		plat.bouncy = true
+		hud.set_springs(spring_charges)
 	plat.lifetime = platform_life_for(distance_m)
 	plat.global_position = world_pos.snapped(Vector2(20.0, 20.0))
 	add_child(plat)
+
+
+func add_springs(n: int) -> void:
+	if game_over:
+		return
+	spring_charges += n
+	hud.set_springs(spring_charges)
 
 
 func add_coin(amount: int = 1) -> void:
