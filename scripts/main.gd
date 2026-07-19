@@ -5,9 +5,24 @@ extends Node2D
 ## Handles the tap input routing (jump vs. build) and the run's lifecycle.
 
 const PLATFORM_COST := 1
-const START_COINS := 3
+const START_COINS := 0
 const SPRING_EVERY := 4  # every Nth build is a spring pad
 const BUILD_COOLDOWN := 0.15
+
+## ---- HARD-MODE SPEED / PLATFORM TUNING ------------------------------------
+## Speed ramps from TerrainSpawner.PHASE_SPEED. The spawner sizes all normal
+## gaps as fractions of run_speed_for(d) (max 0.56*v vs the 0.709*v flat jump
+## reach), so ramp and cap can be pushed without creating unjumpable gaps.
+## Ramp 1.5/m from 110 m hits the 900 cap at ~397 m, just before the void.
+const BASE_SPEED := 470.0
+const SPEED_RAMP := 1.5   # px/s gained per meter past PHASE_SPEED
+const SPEED_CAP := 900.0
+## Conjured platforms crumble faster late-game: 4.0 s early, shrinking to
+## PLATFORM_LIFE_LATE between PLATFORM_DECAY_START..END meters.
+const PLATFORM_LIFE := 4.0
+const PLATFORM_LIFE_LATE := 2.4
+const PLATFORM_DECAY_START := 300.0
+const PLATFORM_DECAY_END := 600.0
 const CAMERA_LEAD := 288.0  # keeps the wizard ~35% from the left edge
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
 const RESTART_LOCKOUT_MS := 600.0
@@ -81,8 +96,7 @@ func _physics_process(delta: float) -> void:
 		var half_w := get_viewport().get_visible_rect().size.x * 0.5
 		if player.global_position.x < cam.global_position.x - half_w - 30.0:
 			player.die()
-	var target_y := clampf(player.global_position.y - 150.0, 150.0, 760.0)
-	cam.global_position.y = lerpf(cam.global_position.y, target_y, 1.0 - pow(0.002, delta))
+	cam.global_position.y = lerpf(cam.global_position.y, camera_target_y(), 1.0 - pow(0.002, delta))
 
 	if shake > 0.0:
 		shake = maxf(0.0, shake - delta * 30.0)
@@ -91,10 +105,22 @@ func _physics_process(delta: float) -> void:
 		cam.offset = Vector2.ZERO
 
 
+func camera_target_y() -> float:
+	# Look down while falling so descents (downward stair waves, deep drops)
+	# reveal the pillars below before the player reaches them.
+	var fall_bias := clampf(player.velocity.y * 0.3, 0.0, 260.0)
+	return clampf(player.global_position.y - 150.0 + fall_bias, 150.0, 920.0)
+
+
 func run_speed_for(d: float) -> float:
 	if d < TerrainSpawner.PHASE_SPEED:
-		return 470.0
-	return minf(470.0 + (d - TerrainSpawner.PHASE_SPEED) * 0.9, 780.0)
+		return BASE_SPEED
+	return minf(BASE_SPEED + (d - TerrainSpawner.PHASE_SPEED) * SPEED_RAMP, SPEED_CAP)
+
+
+func platform_life_for(d: float) -> float:
+	var f := clampf((d - PLATFORM_DECAY_START) / (PLATFORM_DECAY_END - PLATFORM_DECAY_START), 0.0, 1.0)
+	return lerpf(PLATFORM_LIFE, PLATFORM_LIFE_LATE, f)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -140,6 +166,7 @@ func _try_build(world_pos: Vector2) -> void:
 	audio.play("build")
 	var plat := BuiltPlatform.new()
 	plat.bouncy = builds % SPRING_EVERY == 0
+	plat.lifetime = platform_life_for(distance_m)
 	plat.global_position = world_pos.snapped(Vector2(20.0, 20.0))
 	add_child(plat)
 	hud.set_spring_ready(builds % SPRING_EVERY == SPRING_EVERY - 1)

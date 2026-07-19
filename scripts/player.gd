@@ -55,14 +55,10 @@ func _physics_process(delta: float) -> void:
 	else:
 		coyote -= delta
 
-	if jump_buffer > 0.0 and coyote > 0.0:
+	# the free stomp refresh (or coyote) is consumed before a precious star charge
+	if jump_buffer > 0.0 and (coyote > 0.0 or stomp_jump):
 		velocity.y = JUMP_VELOCITY
 		coyote = 0.0
-		jump_buffer = 0.0
-		jumped.emit()
-	elif jump_buffer > 0.0 and stomp_jump and not is_on_floor():
-		# free refresh from a stomp — consumed before a precious star charge
-		velocity.y = JUMP_VELOCITY
 		stomp_jump = false
 		jump_buffer = 0.0
 		jumped.emit()
