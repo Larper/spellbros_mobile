@@ -88,6 +88,43 @@ func _run_tests() -> void:
 		main.coins, goldens / 4.0])
 	gold.queue_free()
 
+	# spring platform: every 4th build is a green launcher pad
+	main.coins = 10
+	main.builds = 0
+	var spring_flags := []
+	var ready_after_3 := false
+	for i in range(4):
+		main.build_cooldown = 0.0
+		main._try_build(Vector2(p.global_position.x + 3000.0 + 300.0 * float(i), 300.0))
+		if i == 2:
+			ready_after_3 = main.hud.spring_label.visible
+	var new_plats := []
+	for c in main.get_children():
+		if c is BuiltPlatform and c.global_position.y < 320.0:
+			new_plats.append(c)
+	for plat in new_plats:
+		spring_flags.append(plat.bouncy)
+	print("TEST spring: flags=%s (expect [false, false, false, true]) hud_ready_after_3=%s (expect true) hud_after_4=%s (expect false)" % [
+		spring_flags, ready_after_3, main.hud.spring_label.visible])
+
+	# spring launch: landing on the pad flings the player ~1.6x jump height
+	var pad: BuiltPlatform = new_plats[3]
+	pad.age = 0.0  # fresh lifetime so it cannot crumble mid-test
+	p.global_position = pad.global_position + Vector2(-80.0, -70.0)
+	p.velocity = Vector2.ZERO
+	var min_vy := 0.0
+	for i in range(12):
+		await create_timer(0.05).timeout
+		min_vy = minf(min_vy, p.velocity.y)
+	print("TEST springlaunch: min_vel_y=%.0f (expect <= -1200, stronger than jump -1170)" % min_vy)
+	# park the wizard on a fresh normal platform so later tests start grounded
+	main.coins = 5
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 200.0, 700.0))
+	p.global_position = Vector2(p.global_position.x + 200.0, 640.0)
+	p.velocity = Vector2.ZERO
+	await create_timer(0.1).timeout
+
 	# speed phases: flat until 190 m, then ramps, capped at 780
 	print("TEST speed: d=100 %.0f (expect 470) | d=260 %.0f (expect 533) | d=700 %.0f (expect 780)" % [
 		main.run_speed_for(100.0), main.run_speed_for(260.0), main.run_speed_for(700.0)])
@@ -103,8 +140,8 @@ func _run_tests() -> void:
 	var moving: bool = absf(p.global_position.x - x_before) > 1.0
 	print("TEST resume: paused=%s moving=%s (expect false true)" % [paused, moving])
 
-	# audio: 5 synthesized SFX plus a looping music track
-	print("TEST audio: sfx=%d (expect 5) music_len=%.1fs (expect ~8.7) looping=%s" % [
+	# audio: 6 synthesized SFX plus a looping music track
+	print("TEST audio: sfx=%d (expect 6) music_len=%.1fs (expect ~8.7) looping=%s" % [
 		main.audio.players.size(), main.audio.music.stream.get_length(),
 		main.audio.music.stream.loop_mode == AudioStreamWAV.LOOP_FORWARD])
 

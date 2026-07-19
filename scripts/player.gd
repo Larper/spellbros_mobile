@@ -6,6 +6,7 @@ extends CharacterBody2D
 
 signal died
 signal jumped
+signal sprung
 
 const BODY_W := 56.0
 const BODY_H := 80.0
@@ -14,6 +15,7 @@ const JUMP_VELOCITY := -1170.0
 const COYOTE_TIME := 0.12
 const JUMP_BUFFER := 0.12
 const STOMP_BOUNCE := -880.0
+const SPRING_LAUNCH := -1500.0  # ~1.6x jump height
 
 var run_speed := 470.0
 var dead := false
@@ -58,6 +60,16 @@ func _physics_process(delta: float) -> void:
 	jump_buffer -= delta
 
 	move_and_slide()
+
+	# spring pads always launch on landing
+	for i in range(get_slide_collision_count()):
+		var col := get_slide_collision(i)
+		if col.get_normal().y < -0.5 and col.get_collider() is BuiltPlatform \
+				and col.get_collider().bouncy:
+			velocity.y = SPRING_LAUNCH
+			coyote = 0.0
+			sprung.emit()
+			break
 
 
 func try_jump() -> void:

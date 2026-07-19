@@ -34,6 +34,9 @@ func _ready() -> void:
 	# death: long sad descending square
 	_add_sfx("death", _sweep(660.0, 70.0, 0.6, 1, 0.4, 2.5), -5.0, 1)
 
+	# boing: springy rising triangle for spring-pad launches
+	_add_sfx("boing", _sweep(160.0, 640.0, 0.25, 2, 0.45, 2.0), -6.0, 2)
+
 	music = AudioStreamPlayer.new()
 	music.stream = _make_music()
 	music.volume_db = -13.0

@@ -6,6 +6,7 @@ extends Node2D
 
 const PLATFORM_COST := 1
 const START_COINS := 3
+const SPRING_EVERY := 4  # every Nth build is a spring pad
 const BUILD_COOLDOWN := 0.15
 const CAMERA_LEAD := 288.0  # keeps the wizard ~35% from the left edge
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
@@ -20,6 +21,7 @@ var hud: Hud
 var audio: GameAudio
 
 var coins := START_COINS
+var builds := 0
 var distance_m := 0.0
 var game_over := false
 var game_over_at := 0.0
@@ -44,6 +46,7 @@ func _ready() -> void:
 	player.global_position = Vector2(260.0, TerrainSpawner.START_GROUND_Y - Player.BODY_H * 0.5)
 	player.died.connect(_on_player_died)
 	player.jumped.connect(func() -> void: audio.play("jump"))
+	player.sprung.connect(func() -> void: audio.play("boing"))
 	add_child(player)
 	start_x = player.global_position.x
 
@@ -133,10 +136,13 @@ func _try_build(world_pos: Vector2) -> void:
 	coins -= PLATFORM_COST
 	hud.update_coins(coins)
 	build_cooldown = BUILD_COOLDOWN
+	builds += 1
 	audio.play("build")
 	var plat := BuiltPlatform.new()
+	plat.bouncy = builds % SPRING_EVERY == 0
 	plat.global_position = world_pos.snapped(Vector2(20.0, 20.0))
 	add_child(plat)
+	hud.set_spring_ready(builds % SPRING_EVERY == SPRING_EVERY - 1)
 
 
 func add_coin(amount: int = 1) -> void:
