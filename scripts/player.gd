@@ -24,6 +24,8 @@ var jump_buffer := 0.0
 var time_alive := 0.0
 var air_jumps := 0  # Star of Levity charge: one stored mid-air jump
 var stomp_jump := false  # stomping an enemy refreshes one jump until landing
+var gravity_dir := 1.0  # FLIPSIDE: -1 runs the ceiling; +1 the floor
+var flip_cooldown := 0.0
 
 
 func _init() -> void:
@@ -47,7 +49,9 @@ func _physics_process(delta: float) -> void:
 		return
 
 	velocity.x = run_speed
-	velocity.y += GRAVITY * delta
+	velocity.y += GRAVITY * delta * gravity_dir
+	up_direction = Vector2.UP if gravity_dir > 0.0 else Vector2.DOWN
+	flip_cooldown -= delta
 
 	if is_on_floor():
 		coyote = COYOTE_TIME
@@ -57,14 +61,14 @@ func _physics_process(delta: float) -> void:
 
 	# the free stomp refresh (or coyote) is consumed before a precious star charge
 	if jump_buffer > 0.0 and (coyote > 0.0 or stomp_jump):
-		velocity.y = JUMP_VELOCITY
+		velocity.y = JUMP_VELOCITY * gravity_dir
 		coyote = 0.0
 		stomp_jump = false
 		jump_buffer = 0.0
 		jumped.emit()
 	elif jump_buffer > 0.0 and air_jumps > 0 and not is_on_floor():
 		# spend the Star of Levity charge for a full mid-air jump
-		velocity.y = JUMP_VELOCITY
+		velocity.y = JUMP_VELOCITY * gravity_dir
 		air_jumps -= 1
 		jump_buffer = 0.0
 		jumped.emit()
@@ -87,6 +91,18 @@ func try_jump() -> void:
 	jump_buffer = JUMP_BUFFER
 
 
+## FLIPSIDE: invert gravity (works mid-air too — a bad flip is undone by
+## another). Zeroing velocity.y makes the flip read as a crisp direction
+## change instead of a fight against built-up momentum.
+func try_flip() -> void:
+	if flip_cooldown > 0.0 or dead:
+		return
+	gravity_dir = -gravity_dir
+	velocity.y = 0.0
+	flip_cooldown = 0.18
+	jumped.emit()
+
+
 func bounce() -> void:
 	velocity.y = STOMP_BOUNCE
 	stomp_jump = true
@@ -102,6 +118,9 @@ func die() -> void:
 
 
 func _draw() -> void:
+	if gravity_dir < 0.0:
+		# ceiling-runner: mirror the whole sprite vertically
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, -1.0))
 	var bob := 0.0
 	if not dead and is_on_floor():
 		bob = sin(time_alive * 14.0) * 2.0

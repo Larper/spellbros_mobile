@@ -5,6 +5,7 @@ extends Area2D
 
 var t := randf() * TAU
 var collected := false
+var lit := false  # UMBRA: crystals beacon through the dark
 
 
 func _init() -> void:
@@ -19,6 +20,8 @@ func _init() -> void:
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
+	if lit:
+		add_child(PsyTheme.make_light(260.0, 0.9))
 
 
 func _process(delta: float) -> void:
@@ -27,10 +30,16 @@ func _process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node2D) -> void:
-	if collected:
-		return
 	var p := body as Player
 	if p == null or p.dead:
+		return
+	collect()
+
+
+## Shared collection path — the player body via signal, or the SPELLBROS
+## echo brother directly (he's a spirit; physics can't see him).
+func collect() -> void:
+	if collected:
 		return
 	collected = true
 	set_deferred("monitoring", false)

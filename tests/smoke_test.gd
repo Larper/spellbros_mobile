@@ -53,9 +53,14 @@ func _run_tests() -> void:
 	await create_timer(1.0).timeout
 
 	# level ladder mapping + unlock/best persistence (on a scratch save file)
-	var map_ok: bool = Levels.level_for(0.0) == 0 and Levels.level_for(99.0) == 0 \
-			and Levels.level_for(100.0) == 1 and Levels.level_for(250.0) == 2 \
-			and Levels.level_for(340.0) == 3 and Levels.level_for(500.0) == 4
+	var map_ok: bool = Levels.level_for(0.0) == 0 and Levels.level_for(299.0) == 0 \
+			and Levels.level_for(300.0) == Levels.SPRINGS \
+			and Levels.level_for(650.0) == Levels.BRIDGES \
+			and Levels.level_for(1000.0) == Levels.FLIPSIDE \
+			and Levels.level_for(1300.0) == Levels.STROBE \
+			and Levels.level_for(1600.0) == Levels.UMBRA \
+			and Levels.level_for(1900.0) == Levels.BROS \
+			and Levels.level_for(2200.0) == Levels.VOID
 	var real_path: String = Levels.save_path
 	Levels.save_path = "user://test_progress.cfg"
 	Levels.unlock(2)
@@ -208,8 +213,8 @@ func _run_tests() -> void:
 	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.air_jumps == 0,
 			"star of levity")
 
-	# SPRINGS level: builds inside 100-200 m are launcher pads, outside not
-	main.distance_m = 120.0
+	# SPRINGS level: builds inside its band are launcher pads, outside not
+	main.distance_m = 350.0
 	main.coins = 2
 	main.build_cooldown = 0.0
 	main._try_build(Vector2(p.global_position.x + 3000.0, 300.0))
@@ -244,6 +249,95 @@ func _run_tests() -> void:
 	p.global_position = Vector2(p.global_position.x + 200.0, 640.0)
 	p.velocity = Vector2.ZERO
 	await create_timer(0.1).timeout
+
+	# FLIPSIDE: jump-tap flips gravity (cooldown eats spam), builds are solid
+	main.distance_m = 950.0
+	p.flip_cooldown = 0.0
+	main._jump_pressed()
+	var flipped: bool = p.gravity_dir < 0.0
+	main._jump_pressed()  # immediate second tap must be swallowed
+	var still_flipped: bool = p.gravity_dir < 0.0
+	p.flip_cooldown = 0.0
+	main._jump_pressed()
+	var righted: bool = p.gravity_dir > 0.0
+	main.coins = 1
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 3600.0, 300.0))
+	var flip_pad: BuiltPlatform = null
+	for c in main.get_children():
+		if c is BuiltPlatform:
+			flip_pad = c
+	print("TEST flipside: flip=%s spam_guard=%s unflip=%s solid_build=%s (expect all true)" % [
+		flipped, still_flipped, righted, not flip_pad._cs.one_way_collision])
+	_check(flipped and still_flipped and righted \
+			and not flip_pad._cs.one_way_collision, "flipside")
+
+	# STROBE: pure beat math, and a live chunk obeying the ghost clock
+	var beat := 60.0 / GameAudio.BPM
+	var idx_ok: bool = Main.strobe_beat_index(0.5 * beat) == 0 \
+			and Main.strobe_beat_index(3.5 * beat) == 3 \
+			and Main.strobe_beat_index(4.2 * beat) == 0
+	var sc := GroundChunk.new(300.0)
+	sc.strobe = true
+	# ahead of the camera: behind it the spawner's cleanup would free it mid-test
+	sc.position = Vector2(p.global_position.x + 4000.0, 200.0)
+	main.spawner.add_child(sc)
+	sc.set_process(false)  # drive its _process by hand with a forced clock
+	Main.strobe_ghost = true
+	Main.strobe_warn = false
+	sc._process(0.016)
+	await create_timer(0.05).timeout  # deferred collision toggle lands
+	var ghost_ok: bool = sc._cs.disabled and sc.modulate.a < 0.3
+	Main.strobe_ghost = false
+	sc._process(0.016)
+	await create_timer(0.05).timeout
+	var solid_ok: bool = not sc._cs.disabled and sc.modulate.a > 0.9
+	sc.queue_free()
+	print("TEST strobe: beat_math=%s ghost=%s resolid=%s (expect all true)" % [
+		idx_ok, ghost_ok, solid_ok])
+	_check(idx_ok and ghost_ok and solid_ok, "strobe ghost clock")
+
+	# UMBRA: the world darkens, builds become lanterns, crystals beacon
+	main.distance_m = 1600.0
+	main.psy._process(0.016)
+	var dark_ok: bool = main.psy.color.v < 0.4
+	main.coins = 1
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 3900.0, 300.0))
+	var lantern: BuiltPlatform = null
+	for c in main.get_children():
+		if c is BuiltPlatform:
+			lantern = c
+	var lantern_lit := false
+	for c in lantern.get_children():
+		if c is PointLight2D:
+			lantern_lit = true
+	main.spawner._place_coin(Vector2(main.start_x + 1600.0 * 100.0, -8500.0))
+	var beacon := false
+	for c in main.spawner.get_children():
+		if c is ManaCrystal and c.position.y < -8000.0:
+			for cc in c.get_children():
+				if cc is PointLight2D:
+					beacon = true
+			c.queue_free()
+	print("TEST umbra: dark=%s lantern=%s beacon=%s (expect all true)" % [
+		dark_ok, lantern_lit, beacon])
+	_check(dark_ok and lantern_lit and beacon, "umbra darkness")
+
+	# SPELLBROS: the echo brother activates, mirrors, and banks crystals
+	main.distance_m = 1900.0
+	p.set_physics_process(false)  # hold the wizard still so the bro stays put
+	await create_timer(0.1).timeout
+	var bro_on: bool = main.bro.active and main.bro.visible
+	var coins_pre: int = main.coins
+	main.spawner._place_coin(main.bro.global_position)
+	await create_timer(0.15).timeout
+	p.set_physics_process(true)
+	print("TEST echobro: active=%s coins %d -> %d (expect +1, bro collected)" % [
+		bro_on, coins_pre, main.coins])
+	_check(bro_on and main.coins == coins_pre + 1, "echo bro")
+	main.distance_m = 20.0
+	main.bro.active = false
 
 	# speed: flat before PHASE_SPEED, then ramps at SPEED_RAMP, capped
 	var s0: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED - 10.0)
@@ -282,11 +376,19 @@ func _run_tests() -> void:
 	print("TEST resume: paused=%s moving=%s (expect false true)" % [paused, moving])
 	_check(not paused and moving, "resume")
 
-	# audio: 6 synthesized SFX plus a looping music track
-	print("TEST audio: sfx=%d (expect 6) music_len=%.1fs (expect ~8.7) looping=%s" % [
+	# audio: 6 synthesized SFX plus the looping psytrance track
+	print("TEST audio: sfx=%d (expect 6) music_len=%.1fs (expect ~13.2) looping=%s" % [
 		main.audio.players.size(), main.audio.music.stream.get_length(),
 		main.audio.music.stream.loop_mode == AudioStreamWAV.LOOP_FORWARD])
 	_check(main.audio.players.size() == 6, "audio")
+
+	# psytrance clock: 8 bars of 4/4 at BPM, beat-synced theme installed
+	print("TEST psybeat: bpm=%.0f len=%.2fs (expect %.2f = 32 beats) theme=%s" % [
+		GameAudio.BPM, main.audio.music.stream.get_length(), 32.0 * (60.0 / GameAudio.BPM),
+		main.psy is PsyTheme])
+	_check(absf(main.audio.music.stream.get_length() - 32.0 * (60.0 / GameAudio.BPM)) < 0.01,
+			"psytrance loop length")
+	_check(main.psy is PsyTheme and main.psy.is_processing(), "psy theme active")
 
 	# stall crush: a player stuck behind the advancing camera dies
 	p.global_position.x = main.cam.global_position.x - 1300.0
@@ -297,14 +399,15 @@ func _run_tests() -> void:
 	await create_timer(1.0).timeout
 	print("TEST endrun: game_over=%s distance=%dm" % [main.game_over, int(main.distance_m)])
 
-	# difficulty phase probes + beatability audit: 80 chunks per distance band
+	# level-band probes + beatability audit: 80 chunks per distance band
 	print("TEST phases (80 chunks each):")
-	print("  band     mega enem maxEnt climb void pilr star brdg  minTop  pace  gap/reach mana/ch builds/ch  bad")
-	for d: float in [15.0, 45.0, 80.0, 130.0, 250.0, 340.0, 500.0]:
+	print("  band     mega enem maxEnt climb void pilr star brdg flip strb  minTop  pace  gap/reach mana/ch builds/ch  bad")
+	for d: float in [15.0, 45.0, 80.0, 130.0, 230.0, 350.0, 700.0, 1000.0, 1300.0, 1600.0, 1900.0, 2200.0]:
 		var s := _probe(d, 80)
-		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
+		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], s["stars"], s["bridge"], int(s["min_top"]), s["pace"],
+			s["voids"], s["pillars"], s["stars"], s["bridge"], s["flip"], s["strobe"],
+			int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
 		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) or s["voids"] > 0,
@@ -318,18 +421,26 @@ func _run_tests() -> void:
 	_check(early["mega"] >= 20 and early["enemies"] == 0, "megas live before enemies")
 	var mid := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 80)
 	_check(mid["enemies"] > 0 and mid["climbs"] == 0, "enemies live before climbs")
-	# SPRINGS level band (100-200): dense climb waves to exploit spring builds
-	var climbb := _probe(Levels.start_m(1) + 30.0, 80)
+	# FOUNDATIONS ends in the swarm zone (from PHASE_SWARM): densest enemies
+	# (enemies per ELIGIBLE chunk; climb waves carry none and dilute raw counts)
+	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
+	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
+	_check(mid["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
+	# SPRINGS band: dense climb waves to exploit the launcher builds
+	var climbb := _probe(Levels.start_m(Levels.SPRINGS) + 50.0, 80)
 	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live in springs band")
-	# BLOB BRIDGES band (200-300): every chunk a bridge, blobs as stepping stones
-	var bridgeb := _probe(Levels.start_m(2) + 50.0, 80)
+	# BLOB BRIDGES band: every chunk a bridge, blobs as stepping stones
+	var bridgeb := _probe(Levels.start_m(Levels.BRIDGES) + 50.0, 80)
 	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 80 and bridgeb["climbs"] == 0,
 			"blob bridges band")
-	# OUTLANDS (300+): standard late game — swarm density, then the void
-	# (enemies per ELIGIBLE chunk; climb waves carry none and dilute raw counts)
-	var swarm := _probe(Levels.start_m(3) + 40.0, 80)
-	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
-	_check(mid["stars"] + climbb["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
+	# FLIPSIDE band: all corridor chunks, no enemies, ceilings cover every gap
+	var flipb := _probe(Levels.start_m(Levels.FLIPSIDE) + 50.0, 80)
+	_check(flipb["flip"] == 80 and flipb["enemies"] == 0, "flipside corridor band")
+	# STROBE band: every chunk beat-gated, rhythm is the only enemy
+	var strobeb := _probe(Levels.start_m(Levels.STROBE) + 50.0, 80)
+	_check(strobeb["strobe"] == 80 and strobeb["enemies"] == 0, "strobe band")
+	# UMBRA and SPELLBROS run the standard generator (their twists live in
+	# lighting and the echo bro); the band loop above already audits them
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 
@@ -346,7 +457,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
-			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "min_top": 9999.0, "bad": 0,
+			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
+			"strobe": 0, "min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -371,6 +483,10 @@ func _probe(d: float, n: int) -> Dictionary:
 		stats["stars"] += s["stars"]
 		if s.get("bridge", false):
 			stats["bridge"] += 1
+		if s.get("flip", false):
+			stats["flip"] += 1
+		if s.get("strobe", false):
+			stats["strobe"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
@@ -384,6 +500,11 @@ func _probe(d: float, n: int) -> Dictionary:
 			# stomp-chain is the intended crossing; one build is the fallback
 			stats["builds"] += 1.0
 			if s["gap"] > one_build:
+				stats["bad"] += 1
+		elif s.get("flip", false):
+			# crossing is free (gravity flip); the ceiling must overlap both
+			# floor edges by a real flip window (0.25 s of travel)
+			if s["overlap"] < 0.25 * v:
 				stats["bad"] += 1
 		elif s["climb"] == -1:
 			stats["builds"] += 1.0  # each up-stair is one platform

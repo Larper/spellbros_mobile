@@ -25,7 +25,9 @@ const PHASE_CLIMB := 85.0
 const PHASE_SPEED := 110.0
 const PHASE_SWARM := 170.0
 const PHASE_RICH := 300.0
-const PHASE_VOID := 380.0
+const PHASE_VOID := 2100.0  # the endgame after the SPELLBROS level
+
+const FLIP_CORRIDOR := 560.0  # floor-to-ceiling height in the FLIPSIDE level
 
 ## ---- HARD-MODE GAP TUNING -------------------------------------------------
 ## Jump math (Player: GRAVITY 3300, JUMP_VELOCITY -1170):
@@ -123,8 +125,11 @@ func _spawn_chunk() -> Dictionary:
 	if d >= PHASE_VOID:
 		return _spawn_void_segment()
 
-	if Levels.level_for(d) == 2:
+	var lv := Levels.level_for(d)
+	if lv == Levels.BRIDGES:
 		return _spawn_bridge_chunk(d, v, budget)
+	if lv == Levels.FLIPSIDE:
+		return _spawn_flip_chunk(d, v)
 
 	_update_climb_state(d)
 
@@ -162,7 +167,9 @@ func _spawn_chunk() -> Dictionary:
 	var top_y := clampf(last_top_y + dy, y_min, BASE_Y_MAX)
 
 	var x := next_x + gap
-	_place_chunk(x, top_y, w)
+	# STROBE level: ground obeys the beat (solid 3 beats, ghost on the 4th)
+	var strobe := lv == Levels.STROBE
+	_place_chunk(x, top_y, w, strobe)
 
 	var used := 0
 
@@ -171,9 +178,10 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
 		used += 1
 
-	# enemies (never on climb stairs — those are about building)
+	# enemies (never on climb stairs — those are about building; never in
+	# STROBE either, where the rhythm itself is the enemy)
 	var enemies := 0
-	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0:
+	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not strobe:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
 		if rng.randf() < chance:
 			enemies = 1
@@ -221,15 +229,43 @@ func _spawn_chunk() -> Dictionary:
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
-		"void": false, "pillar": false, "stars": stars,
+		"void": false, "pillar": false, "stars": stars, "strobe": strobe,
 		"rise": rise, "speed": v,
 	}
 
 
-## BLOB BRIDGES level (200-300 m): sparse pillars split by gaps wider than
-## any jump, with drifting sky blobs hovering over each gap. Chain stomps to
-## cross (each stomp refreshes the air jump and pays the +1 bounty) — or
-## spend 1 mana to bridge the old-fashioned way.
+## FLIPSIDE level: a two-surface corridor. Floor gaps outrun any jump — you
+## cross by flipping gravity onto a ceiling slab that overlaps both edges of
+## the gap (the overlap is the flip window, sized in seconds of run speed).
+func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
+	var ov := 0.30 * v  # flip window each side: ~0.3 s of travel
+	var gap := rng.randf_range(0.5 * v, 0.9 * v)
+	var w := rng.randf_range(620.0, 940.0)
+	var top_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
+	var x := next_x + gap
+	_place_chunk(x, top_y, w)
+	# ceiling slab bridges the gap plus a flip window over each floor edge
+	_place_ceiling(next_x - ov, minf(last_top_y, top_y) - FLIP_CORRIDOR, gap + ov * 2.0)
+	var used := 0
+	if rng.randf() < 0.55:
+		# crystal hangs mid-corridor over the gap: the flip is the detour
+		_place_coin(Vector2(next_x + gap * 0.5, top_y - FLIP_CORRIDOR * 0.5))
+		used = 1
+	var rise := maxf(0.0, last_top_y - top_y)
+	next_x = x + w
+	last_top_y = top_y
+	return {
+		"gap": gap, "width": w, "top_y": top_y, "mega": false,
+		"enemies": 0, "entities": used, "climb": 0,
+		"void": false, "pillar": false, "flip": true, "overlap": ov,
+		"stars": 0, "rise": rise, "speed": v,
+	}
+
+
+## BLOB BRIDGES level: sparse pillars split by gaps wider than any jump,
+## with drifting sky blobs hovering over each gap. Chain stomps to cross
+## (each stomp refreshes the air jump and pays the +1 bounty) — or spend
+## 1 mana to bridge the old-fashioned way.
 func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	var gap := rng.randf_range(0.75 * v, 1.05 * v)
 	var w := rng.randf_range(280.0, 400.0)
@@ -275,7 +311,9 @@ func _spawn_void_segment() -> Dictionary:
 	void_y = clampf(void_y + rng.randf_range(-140.0, 140.0), 340.0, 800.0)
 
 	if rng.randf() < 0.3:
-		var gap := rng.randf_range(380.0, 560.0)
+		# gap as a fraction of live speed (0.62 < 0.709 flat reach) so pillars
+		# stay jumpable no matter what speed the void is entered at
+		var gap := rng.randf_range(0.42 * v, 0.62 * v)
 		var w := rng.randf_range(220.0, 340.0)
 		var top_y := clampf(void_y + 120.0, 500.0, 940.0)
 		var x := next_x + gap
@@ -334,9 +372,19 @@ func enemy_speed_for(d: float) -> float:
 	return lerpf(ENEMY_SPEED_BASE, ENEMY_SPEED_MAX, f)
 
 
-func _place_chunk(x: float, top_y: float, w: float) -> void:
+func _place_chunk(x: float, top_y: float, w: float, strobe := false) -> void:
 	var chunk := GroundChunk.new(w)
 	chunk.position = Vector2(x, top_y)
+	chunk.strobe = strobe
+	add_child(chunk)
+
+
+## Ceiling slab for FLIPSIDE: its BOTTOM face (at ceil_y) is the walkable
+## surface once gravity is flipped; the slab fills the screen upward.
+func _place_ceiling(x: float, ceil_y: float, w: float) -> void:
+	var chunk := GroundChunk.new(w)
+	chunk.ceiling = true
+	chunk.position = Vector2(x, ceil_y - GroundChunk.THICK)
 	add_child(chunk)
 
 
@@ -349,4 +397,7 @@ func _place_star(pos: Vector2) -> void:
 func _place_coin(pos: Vector2) -> void:
 	var coin := ManaCrystal.new()
 	coin.position = pos
+	# UMBRA: crystals carry their own light so they beacon through the dark
+	var d: float = (pos.x - main.start_x) / 100.0 + main.start_offset_m
+	coin.lit = Levels.level_for(d) == Levels.UMBRA
 	add_child(coin)

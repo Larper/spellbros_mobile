@@ -14,21 +14,29 @@ var lifetime := 4.0  # Main shortens this late-game (see Main.platform_life_for)
 var age := 0.0
 var visual_scale := 0.2
 var bouncy := false
+var solid := false  # FLIPSIDE: landable from both gravity directions
+var lit := false    # UMBRA: built platforms are lanterns
+
+var _cs: CollisionShape2D
 
 
 func _init() -> void:
 	collision_layer = 1
 	collision_mask = 0
-	var cs := CollisionShape2D.new()
+	_cs = CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
 	rect.size = SIZE
-	cs.shape = rect
-	cs.one_way_collision = true
-	cs.one_way_collision_margin = 24.0
-	add_child(cs)
+	_cs.shape = rect
+	_cs.one_way_collision = true
+	_cs.one_way_collision_margin = 24.0
+	add_child(_cs)
 
 
 func _ready() -> void:
+	if solid:
+		_cs.one_way_collision = false
+	if lit:
+		add_child(PsyTheme.make_light(360.0, 1.1))
 	var t := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.tween_property(self, "visual_scale", 1.0, 0.18)
 

@@ -173,7 +173,7 @@ func _build_menu(root: Control) -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	level_list = VBoxContainer.new()
-	level_list.add_theme_constant_override("separation", 16)
+	level_list.add_theme_constant_override("separation", 10)
 	menu_root.add_child(level_list)
 	level_list.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	level_list.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -190,8 +190,8 @@ func show_menu(unlocked: int) -> void:
 	for i in range(Levels.count()):
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(860.0, 92.0)
-		b.add_theme_font_size_override("font_size", 40)
+		b.custom_minimum_size = Vector2(860.0, 76.0)
+		b.add_theme_font_size_override("font_size", 34)
 		if i <= unlocked:
 			var best := Levels.best_for(i)
 			var best_txt := "   best %d m" % best if best > 0 else ""

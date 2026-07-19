@@ -38,12 +38,18 @@ static var session_best := 0.0
 ## -1 = show the level-select menu; otherwise the level index to auto-start
 ## (kept across scene reloads so death -> tap retries the same level fast)
 static var auto_start_level := -1
+## STROBE clock, read by every strobing GroundChunk (solid 3 beats, ghost 4th)
+static var strobe_ghost := false
+static var strobe_warn := false
 
 var player: Player
 var cam: Camera2D
 var spawner: TerrainSpawner
 var hud: Hud
 var audio: GameAudio
+var psy: PsyTheme
+var bro: EchoBro
+var wizard_light: PointLight2D
 
 var coins := START_COINS
 var start_level := 0
@@ -76,6 +82,12 @@ func _ready() -> void:
 	player.sprung.connect(func() -> void: audio.play("boing"))
 	add_child(player)
 	start_x = player.global_position.x
+	wizard_light = PsyTheme.make_light(520.0, 1.3)
+	wizard_light.enabled = false
+	player.add_child(wizard_light)
+
+	bro = EchoBro.new()
+	add_child(bro)
 
 	cam = Camera2D.new()
 	cam.global_position = Vector2(player.global_position.x + CAMERA_LEAD, 620.0)
@@ -87,6 +99,9 @@ func _ready() -> void:
 	add_child(hud)
 	hud.update_coins(coins)
 	hud.update_score(0)
+
+	psy = PsyTheme.new()
+	add_child(psy)
 
 	if auto_start_level >= 0:
 		begin_run(auto_start_level)
@@ -126,6 +141,11 @@ func to_menu() -> void:
 func _physics_process(delta: float) -> void:
 	build_cooldown = maxf(0.0, build_cooldown - delta)
 
+	# STROBE clock: solid on beat indices 0-2, warn on 2, ghost on 3
+	var bi := strobe_beat_index(psy.t)
+	Main.strobe_ghost = bi == 3
+	Main.strobe_warn = bi == 2
+
 	if not game_over:
 		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0 + start_offset_m)
 		player.run_speed = run_speed_for(distance_m)
@@ -137,6 +157,13 @@ func _physics_process(delta: float) -> void:
 			Levels.unlock(lv)
 			hud.show_level_banner("LEVEL %d: %s" % [lv + 1, Levels.level_name(lv)])
 			audio.play("pickup")
+		# per-level state: darkness light, the echo brother, gravity hygiene
+		wizard_light.enabled = lv == Levels.UMBRA
+		bro.active = lv == Levels.BROS
+		if lv != Levels.FLIPSIDE and player.gravity_dir < 0.0:
+			player.gravity_dir = 1.0  # leaving the corridor rights the world
+		if lv == Levels.FLIPSIDE and player.global_position.y < cam.global_position.y - 710.0:
+			player.die()  # flew off the top with no ceiling to catch you
 		if player.global_position.y > cam.global_position.y + 710.0:
 			player.die()  # ~280 world px below the zoomed view's bottom edge
 
@@ -186,6 +213,11 @@ func _lowest_ground_ahead() -> float:
 	return lowest
 
 
+## Position in the 4-beat strobe bar for a given music time (pure, testable).
+static func strobe_beat_index(time: float) -> int:
+	return int(time / (60.0 / GameAudio.BPM)) % 4
+
+
 func run_speed_for(d: float) -> float:
 	if d < TerrainSpawner.PHASE_SPEED:
 		return BASE_SPEED
@@ -206,7 +238,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if game_over:
 				_maybe_restart()
 			else:
-				player.try_jump()
+				_jump_pressed()
 		elif event.keycode == KEY_R and game_over:
 			_maybe_restart()
 
@@ -225,11 +257,19 @@ func _handle_tap(screen_pos: Vector2) -> void:
 	var divider_x: float = maxf(player_screen_x,
 			get_viewport().get_visible_rect().size.x * 0.5 - CAMERA_LEAD * CAMERA_ZOOM)
 	if screen_pos.x < divider_x:
-		player.try_jump()
+		_jump_pressed()
 	else:
 		var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos
 		world_pos.x -= BUILD_TOUCH_NUDGE
 		_try_build(world_pos)
+
+
+## The jump tap doubles as the gravity flip inside FLIPSIDE.
+func _jump_pressed() -> void:
+	if Levels.level_for(distance_m) == Levels.FLIPSIDE:
+		player.try_flip()
+	else:
+		player.try_jump()
 
 
 func _maybe_restart() -> void:
@@ -248,8 +288,10 @@ func _try_build(world_pos: Vector2) -> void:
 	build_cooldown = BUILD_COOLDOWN
 	audio.play("build")
 	var plat := BuiltPlatform.new()
-	# SPRINGS level: every build in its band is a launcher pad
-	plat.bouncy = Levels.level_for(distance_m) == 1
+	var lv := Levels.level_for(distance_m)
+	plat.bouncy = lv == Levels.SPRINGS  # every SPRINGS build is a launcher
+	plat.solid = lv == Levels.FLIPSIDE  # landable from both gravities
+	plat.lit = lv == Levels.UMBRA       # built lanterns mark your trail
 	plat.lifetime = platform_life_for(distance_m)
 	plat.global_position = world_pos.snapped(Vector2(20.0, 20.0))
 	add_child(plat)
