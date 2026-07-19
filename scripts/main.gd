@@ -106,10 +106,28 @@ func _physics_process(delta: float) -> void:
 
 
 func camera_target_y() -> float:
-	# Look down while falling so descents (downward stair waves, deep drops)
-	# reveal the pillars below before the player reaches them.
-	var fall_bias := clampf(player.velocity.y * 0.3, 0.0, 260.0)
-	return clampf(player.global_position.y - 150.0 + fall_bias, 150.0, 920.0)
+	# Frame the player with a slightly lower baseline than before, and ease
+	# further down when the terrain ahead sits lower, so the next pillar is
+	# already on screen while descending. Chunk tops are static world data,
+	# so this never pulses with the jump arc.
+	var target := player.global_position.y - 60.0
+	var ahead := _lowest_ground_ahead()
+	if ahead > 0.0:
+		target = maxf(target, minf(ahead - 450.0, player.global_position.y + 300.0))
+	return clampf(target, 150.0, 920.0)
+
+
+func _lowest_ground_ahead() -> float:
+	# Top y of the lowest chunk overlapping [player.x, player.x + 700]; 0 if none.
+	var px := player.global_position.x
+	var lowest := 0.0
+	for c in spawner.get_children():
+		var g := c as GroundChunk
+		if g == null:
+			continue
+		if g.position.x <= px + 700.0 and g.position.x + g.width >= px:
+			lowest = maxf(lowest, g.position.y)
+	return lowest
 
 
 func run_speed_for(d: float) -> float:
