@@ -407,9 +407,12 @@ func _run_tests() -> void:
 	var bridgeb := _probe(Levels.start_m(Levels.BRIDGES) + 50.0, 80)
 	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 80 and bridgeb["climbs"] == 0,
 			"blob bridges band")
-	# FLIPSIDE band: all corridor chunks, no enemies, ceilings cover every gap
+	# FLIPSIDE band: all corridor chunks, no enemies, chains + some dead zones
 	var flipb := _probe(Levels.start_m(Levels.FLIPSIDE) + 50.0, 80)
 	_check(flipb["flip"] == 80 and flipb["enemies"] == 0, "flipside corridor band")
+	_check(flipb["dead"] > 0 and flipb["dead"] < 40, "flipside dead zones present but not dominant")
+	# dead zones must be affordable: crystals in the band outpay the builds
+	_check(flipb["mana"] >= flipb["builds"] * 0.8, "flipside build economy")
 	# UMBRA and SPELLBROS run the standard generator (their twists live in
 	# lighting and the echo bro); the band loop above already audits them
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
@@ -429,7 +432,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"min_top": 9999.0, "bad": 0,
+			"dead": 0, "min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -456,6 +459,8 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["bridge"] += 1
 		if s.get("flip", false):
 			stats["flip"] += 1
+		if s.get("dead", false):
+			stats["dead"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
@@ -470,10 +475,15 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["builds"] += 1.0
 			if s["gap"] > one_build:
 				stats["bad"] += 1
+		elif s.get("dead", false):
+			# dead zone: both surfaces gone; exactly one built platform bridges
+			stats["builds"] += 1.0
+			if s["gap"] > one_build:
+				stats["bad"] += 1
 		elif s.get("flip", false):
-			# crossing is free (gravity flip); the ceiling must overlap both
-			# floor edges by a real flip window (0.25 s of travel)
-			if s["overlap"] < 0.25 * v:
+			# chain strip: needs a real shared flip window (0.25 s of travel)
+			# AND enough strip beyond it to land the ~0.54 s flip transit
+			if s["overlap"] < 0.25 * v or s["width"] + s["overlap"] < 0.62 * v:
 				stats["bad"] += 1
 		elif s["climb"] == -1:
 			stats["builds"] += 1.0  # each up-stair is one platform

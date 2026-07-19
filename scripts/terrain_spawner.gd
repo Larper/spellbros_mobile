@@ -28,6 +28,7 @@ const PHASE_RICH := 300.0
 const PHASE_VOID := 1800.0  # the endgame after the SPELLBROS level
 
 const FLIP_CORRIDOR := 560.0  # floor-to-ceiling height in the FLIPSIDE level
+const FLIP_DEAD_CHANCE := 0.25  # dead zones: both surfaces gone, build to cross
 
 ## ---- HARD-MODE GAP TUNING -------------------------------------------------
 ## Jump math (Player: GRAVITY 3300, JUMP_VELOCITY -1170):
@@ -85,6 +86,10 @@ var force_mega := false
 
 # void phase: height the fragment trail wanders around
 var void_y := START_GROUND_Y - 120.0
+
+# FLIPSIDE chain state: which surface the wizard's current lane is on
+# (true on entering the band — he arrives running the floor)
+var flip_on_floor := true
 
 
 func _ready() -> void:
@@ -231,31 +236,59 @@ func _spawn_chunk() -> Dictionary:
 	}
 
 
-## FLIPSIDE level: a two-surface corridor. Floor gaps outrun any jump — you
-## cross by flipping gravity onto a ceiling slab that overlaps both edges of
-## the gap (the overlap is the flip window, sized in seconds of run speed).
+## FLIPSIDE level: a two-surface corridor of FLIP CHAINS — alternating
+## floor and ceiling strips that share ONLY an overlap window (ov), so the
+## run is a sustained rhythm of flip-run-flip-run, never longer than ~0.5 s
+## on one surface. The flip transit takes ~0.54 s of fall, so strips are
+## sized (>= 0.75*v) to guarantee a landing on the far strip when flipping
+## anywhere in the shared window.
+## DEAD ZONES (FLIP_DEAD_CHANCE, floor side only): both surfaces vanish for
+## 0.8-1.2*v — beyond any jump, but one solid built platform (they work
+## from both gravities here) always bridges it. Mana pressure, meet flips.
 func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
-	var ov := 0.30 * v  # flip window each side: ~0.3 s of travel
-	var gap := rng.randf_range(0.5 * v, 0.9 * v)
-	var w := rng.randf_range(620.0, 940.0)
-	var top_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
-	var x := next_x + gap
-	_place_chunk(x, top_y, w)
-	# ceiling slab bridges the gap plus a flip window over each floor edge
-	_place_ceiling(next_x - ov, minf(last_top_y, top_y) - FLIP_CORRIDOR, gap + ov * 2.0)
+	var ov := 0.30 * v  # shared flip window between consecutive strips
+	var floor_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
+
+	# dead zone: only rolled while the wizard's lane is the floor
+	if flip_on_floor and rng.randf() < FLIP_DEAD_CHANCE:
+		var gap := rng.randf_range(0.8 * v, 1.2 * v)
+		var w := rng.randf_range(0.7 * v, 1.0 * v)
+		var x := next_x + gap
+		_place_chunk(x, floor_y, w)
+		var used := 0
+		if rng.randf() < 0.7:
+			# the reward for paying the bridge toll hangs over the emptiness
+			_place_coin(Vector2(next_x + gap * 0.5, floor_y - 260.0))
+			used = 1
+		next_x = x + w
+		last_top_y = floor_y
+		return {
+			"gap": gap, "width": w, "top_y": floor_y, "mega": false,
+			"enemies": 0, "entities": used, "climb": 0,
+			"void": false, "pillar": false, "flip": true, "dead": true,
+			"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
+		}
+
+	# chain strip: the opposite surface, starting ov inside the current one
+	var w := rng.randf_range(0.75 * v, 1.1 * v)
+	var start := next_x - ov
+	if flip_on_floor:
+		_place_ceiling(start, floor_y - FLIP_CORRIDOR, w)
+	else:
+		_place_chunk(start, floor_y, w)
+		last_top_y = floor_y
+	flip_on_floor = not flip_on_floor
 	var used := 0
-	if rng.randf() < 0.55:
-		# crystal hangs mid-corridor over the gap: the flip is the detour
-		_place_coin(Vector2(next_x + gap * 0.5, top_y - FLIP_CORRIDOR * 0.5))
+	if rng.randf() < 0.5:
+		# crystal mid-corridor over the flip window: timing is the detour
+		_place_coin(Vector2(start + ov * 0.5, floor_y - FLIP_CORRIDOR * 0.5))
 		used = 1
-	var rise := maxf(0.0, last_top_y - top_y)
-	next_x = x + w
-	last_top_y = top_y
+	next_x = start + w
 	return {
-		"gap": gap, "width": w, "top_y": top_y, "mega": false,
+		"gap": -ov, "width": w, "top_y": floor_y, "mega": false,
 		"enemies": 0, "entities": used, "climb": 0,
-		"void": false, "pillar": false, "flip": true, "overlap": ov,
-		"stars": 0, "rise": rise, "speed": v,
+		"void": false, "pillar": false, "flip": true, "dead": false,
+		"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
 	}
 
 
