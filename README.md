@@ -35,9 +35,9 @@ the opening teaches you to be greedy.
 - **Built platforms** — 240×24 one-way light-bridges. They crumble after
   **4.0 s** early game, shrinking to **2.4 s** between 300–600 m. Collision is
   full-size instantly, so a panic-build under your feet saves you.
-- **Enemies (spike blobs)** — patrol their chunk; stomp from above kills them
-  (and refreshes one mid-air jump until you land), any other touch kills you.
-  Patrol speed ramps 130 → 260 px/s from 170 m.
+- **Enemies (blobs)** — glowing circles that sit still where they spawn;
+  stomp from above kills them (and refreshes one mid-air jump until you
+  land), any other touch kills you.
 - **Crush camera** — the camera never waits. It holds a lead while you keep
   pace but keeps rolling (at 85% run speed) if you stall; fall behind the left
   screen edge and you die. Stalling to build stairs is a calculated risk.
@@ -68,7 +68,7 @@ opens with a 20 m safe runway and two teaching crystals, then:
 |---|---|---|
 | 0–25 | warm-up | plain gaps, all jumpable |
 | 25 | BUILD | **mega gaps** appear — wider than any jump, must be bridged (one platform always suffices); a crystal floats over each as the reward |
-| 50 | ENEMY | spike blobs start patrolling; Stars of Levity start spawning |
+| 50 | ENEMY | blobs start appearing; Stars of Levity start spawning |
 | 85 | CLIMB | **climb waves** — terrain staircases up beyond jump height; each step needs a build, steps pay out crystals more reliably |
 | 110 | SPEED | run speed starts ramping (+1.5 px/s per meter) |
 | 170 | SWARM | 2 enemies per wide chunk, faster blobs, mega gaps can **chain into doubles** (45%) |
