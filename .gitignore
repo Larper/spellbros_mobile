@@ -4,6 +4,9 @@
 # Android build artifacts (added later by export setup)
 android/
 
+# Export output (web build, zips)
+build/
+
 # OS junk
 Thumbs.db
 .DS_Store
