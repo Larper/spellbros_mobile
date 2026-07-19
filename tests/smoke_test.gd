@@ -30,10 +30,11 @@ func _check(ok: bool, label: String) -> void:
 func _run_tests() -> void:
 	await create_timer(1.0).timeout
 	var p = main.player
-	print("TEST setup: player=%s on_floor=%s coins=%d (expect 3)" % [p != null, p.is_on_floor(), main.coins])
-	_check(p != null and main.coins == 3, "setup")
+	print("TEST setup: player=%s on_floor=%s coins=%d (expect %d = START_COINS)" % [p != null, p.is_on_floor(), main.coins, main.START_COINS])
+	_check(p != null and main.coins == main.START_COINS, "setup")
 
-	# build a platform ahead of the wizard
+	# build a platform ahead of the wizard (seed mana; the run now starts at 0)
+	main.coins = 3
 	var coins_before: int = main.coins
 	main._try_build(Vector2(p.global_position.x + 500.0, p.global_position.y - 120.0))
 	await create_timer(0.1).timeout
@@ -61,14 +62,19 @@ func _run_tests() -> void:
 	print("TEST stompjump: vel %.0f -> %.0f (expect falling, then jump < -700)" % [fall_vel, p.velocity.y])
 	_check(p.velocity.y < -700.0, "stompjump")
 
-	# stomp refresh: bouncing off an enemy grants one air jump until landing
-	p.global_position.y -= 400.0
-	p.bounce()
-	await create_timer(0.3).timeout
-	var fall_vel: float = p.velocity.y
-	p.try_jump()
-	await create_timer(0.1).timeout
-	print("TEST stompjump: vel %.0f -> %.0f (expect falling, then jump < -700)" % [fall_vel, p.velocity.y])
+	# camera looks down while falling (descending-staircase visibility);
+	# pin the wizard at a mid-screen height so the clamp floor stays out of it
+	var vy_saved: float = p.velocity.y
+	var y_saved: float = p.global_position.y
+	p.global_position.y = 800.0
+	p.velocity.y = 0.0
+	var t_level: float = main.camera_target_y()
+	p.velocity.y = 900.0
+	var t_fall: float = main.camera_target_y()
+	p.velocity.y = vy_saved
+	p.global_position.y = y_saved
+	print("TEST camfall: target level %.0f, falling %.0f (expect falling >= 200 px lower)" % [t_level, t_fall])
+	_check(t_fall - t_level >= 200.0, "camera fall bias")
 
 	# no-mana path must refuse to build
 	main.coins = 0

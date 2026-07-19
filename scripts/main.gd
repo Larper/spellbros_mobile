@@ -93,14 +93,20 @@ func _physics_process(delta: float) -> void:
 		var half_w := get_viewport().get_visible_rect().size.x * 0.5
 		if player.global_position.x < cam.global_position.x - half_w - 30.0:
 			player.die()
-	var target_y := clampf(player.global_position.y - 150.0, 150.0, 760.0)
-	cam.global_position.y = lerpf(cam.global_position.y, target_y, 1.0 - pow(0.002, delta))
+	cam.global_position.y = lerpf(cam.global_position.y, camera_target_y(), 1.0 - pow(0.002, delta))
 
 	if shake > 0.0:
 		shake = maxf(0.0, shake - delta * 30.0)
 		cam.offset = Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
 	else:
 		cam.offset = Vector2.ZERO
+
+
+func camera_target_y() -> float:
+	# Look down while falling so descents (downward stair waves, deep drops)
+	# reveal the pillars below before the player reaches them.
+	var fall_bias := clampf(player.velocity.y * 0.3, 0.0, 260.0)
+	return clampf(player.global_position.y - 150.0 + fall_bias, 150.0, 920.0)
 
 
 func run_speed_for(d: float) -> float:
