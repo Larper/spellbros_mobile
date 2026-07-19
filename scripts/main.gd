@@ -169,8 +169,14 @@ func _handle_tap(screen_pos: Vector2) -> void:
 		return
 	# Mobile controls: the wizard splits the screen. Tap anywhere to his
 	# left to jump, anywhere to his right to build a platform there.
+	# The divider never drops below the wizard's normal resting position:
+	# when the crush-camera pushes him toward the left edge (stalled while
+	# stair-building), the jump zone must not shrink away right when jumps
+	# matter most.
 	var player_screen_x: float = (get_canvas_transform() * player.global_position).x
-	if screen_pos.x < player_screen_x:
+	var divider_x: float = maxf(player_screen_x,
+			get_viewport().get_visible_rect().size.x * 0.5 - CAMERA_LEAD * CAMERA_ZOOM)
+	if screen_pos.x < divider_x:
 		player.try_jump()
 	else:
 		var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos

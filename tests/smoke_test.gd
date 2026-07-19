@@ -106,6 +106,20 @@ func _run_tests() -> void:
 	_check(nudge_err <= 10.001, "build nudge left")
 	p.jump_buffer = 0.0
 
+	# jump-zone floor: with the wizard crushed toward the left edge, a tap
+	# right of him but left of his NORMAL position must still jump, not build
+	var x_keep: float = p.global_position.x
+	p.global_position.x = main.cam.global_position.x - 600.0  # screen x ~210
+	main.coins = 1
+	main.build_cooldown = 0.0
+	main._handle_tap(Vector2(300.0, 500.0))
+	var floor_jumps: bool = p.jump_buffer > 0.0 and main.coins == 1
+	p.global_position.x = x_keep
+	p.jump_buffer = 0.0
+	main.coins = 0
+	print("TEST jumpzone: crushed-left tap jumps=%s (expect true, no build)" % floor_jumps)
+	_check(floor_jumps, "jump zone floor")
+
 	# stomp bounty: squishing a blob pays +1 mana and bounces the player
 	main.coins = 2
 	var blob := SpikeBlob.new(0.0, 100.0)
