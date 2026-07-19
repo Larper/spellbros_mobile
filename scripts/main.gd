@@ -5,7 +5,7 @@ extends Node2D
 ## Handles the tap input routing (jump vs. build) and the run's lifecycle.
 
 const PLATFORM_COST := 1
-const START_COINS := 3
+const START_COINS := 0
 const BUILD_COOLDOWN := 0.15
 const CAMERA_LEAD := 288.0  # keeps the wizard ~35% from the left edge
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
