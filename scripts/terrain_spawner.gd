@@ -61,6 +61,7 @@ const CLIMB_COOLDOWN := 4         # flat chunks required between climb waves
 
 const MANA_CHANCE := 0.45
 const MANA_CHANCE_CLIMB := 0.65
+const GOLD_CHANCE_VOID := 0.22  # golden crystals exist only in the void
 
 const BASE_Y_MIN := 690.0
 const BASE_Y_MAX := 970.0
@@ -295,8 +296,10 @@ func _place_star(pos: Vector2) -> void:
 func _place_coin(pos: Vector2) -> void:
 	var coin := ManaCrystal.new()
 	coin.position = pos
-	# rare golden crystal: worth 3 mana (expected crystal value 1.0 -> 1.2,
-	# so the economy stays tight but every spawn has jackpot potential)
-	if rng.randf() < 0.1:
+	# Golden crystals (worth 3) are the void's lifeline: before PHASE_VOID
+	# every crystal is plain, once pillars go sparse ~22% come up gold.
+	# Gated by the coin's own chunk position, like all difficulty.
+	var d: float = (pos.x - main.start_x) / 100.0
+	if d >= PHASE_VOID and rng.randf() < GOLD_CHANCE_VOID:
 		coin.make_golden()
 	add_child(coin)

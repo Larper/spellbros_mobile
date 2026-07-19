@@ -112,24 +112,34 @@ func _run_tests() -> void:
 	main.game_over = false
 	main.hud.over_root.visible = false
 
-	# golden crystal: worth 3 mana, with a spawn rate of ~10%
+	# golden crystal: worth 3 mana; ZERO gold before the void phase, then
+	# ~22% of void crystals (gold is the lifeline economy out there)
 	main.coins = 0
 	var gold := ManaCrystal.new()
 	gold.make_golden()
 	main.add_child(gold)
 	gold._on_body_entered(p)
-	var goldens := 0
+	var pre_x: float = main.start_x + 100.0 * 100.0  # a 100 m chunk position
+	var void_x: float = main.start_x + (TerrainSpawner.PHASE_VOID + 50.0) * 100.0
+	var gold_pre := 0
+	var gold_void := 0
+	for i in range(200):
+		main.spawner._place_coin(Vector2(pre_x, -9000.0))
 	for i in range(400):
-		main.spawner._place_coin(Vector2(-9000.0, -9000.0))
+		main.spawner._place_coin(Vector2(void_x, -9000.0))
 	for c in main.spawner.get_children():
 		if c is ManaCrystal and c.position.y < -8000.0:
 			if c.value == 3:
-				goldens += 1
+				if absf(c.position.x - pre_x) < 1.0:
+					gold_pre += 1
+				else:
+					gold_void += 1
 			c.queue_free()
-	print("TEST gold: coins=%d (expect 3) spawn_rate=%.1f%% of 400 (expect ~10%%)" % [
-		main.coins, goldens / 4.0])
+	print("TEST gold: coins=%d (expect 3) pre-void gold=%d of 200 (expect 0) void rate=%.1f%% of 400 (expect ~22%%)" % [
+		main.coins, gold_pre, gold_void / 4.0])
 	_check(main.coins == 3, "golden crystal value")
-	_check(goldens >= 15 and goldens <= 75, "golden spawn rate")
+	_check(gold_pre == 0, "no gold before void")
+	_check(gold_void >= 40 and gold_void <= 140, "void gold rate")
 	gold.queue_free()
 
 	# spring platform: every 4th build is a green launcher pad

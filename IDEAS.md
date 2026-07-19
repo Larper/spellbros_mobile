@@ -88,6 +88,10 @@ but the mega-gap crystal is already a placed reward — stacking certainty there
 turn "jackpot" into "salary". Kept a flat 10% roll on every spawn so *any* crystal can
 be the exciting one. Measured spawn rate across test runs: 8.5-12% over 400 samples,
 right on target. Expected crystal value rises only 1.0 -> 1.2 mana, so scarcity holds.
+*Owner-directed rework (post HARD merge):* gold now spawns ONLY in the void phase
+(d >= PHASE_VOID), where pillars are very sparse and gold is the lifeline economy —
+~22% of void crystals, zero before. Gated by the coin's chunk position in the spawner,
+like every other difficulty rule.
 
 **Spring platform.** Two design forks resolved while building:
 - *Launch condition:* "bounce only when falling fast" vs "always launch on landing".
