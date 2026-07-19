@@ -22,6 +22,7 @@ var dead := false
 var coyote := 0.0
 var jump_buffer := 0.0
 var time_alive := 0.0
+var air_jumps := 0  # Star of Levity charge: one stored mid-air jump
 
 
 func _init() -> void:
@@ -55,6 +56,12 @@ func _physics_process(delta: float) -> void:
 	if jump_buffer > 0.0 and coyote > 0.0:
 		velocity.y = JUMP_VELOCITY
 		coyote = 0.0
+		jump_buffer = 0.0
+		jumped.emit()
+	elif jump_buffer > 0.0 and air_jumps > 0 and not is_on_floor():
+		# spend the Star of Levity charge for a full mid-air jump
+		velocity.y = JUMP_VELOCITY
+		air_jumps -= 1
 		jump_buffer = 0.0
 		jumped.emit()
 	jump_buffer -= delta
@@ -120,3 +127,10 @@ func _draw() -> void:
 		var step := sin(time_alive * 20.0)
 		draw_rect(Rect2(-16 + step * 5.0, 38, 12, 6), Color("2f2650"))
 		draw_rect(Rect2(6 - step * 5.0, 38, 12, 6), Color("2f2650"))
+	# Star of Levity charge: gold sparkles orbit while an air jump is stored
+	if air_jumps > 0:
+		for i in range(3):
+			var a := time_alive * 3.0 + TAU * float(i) / 3.0
+			var sp := Vector2(cos(a) * 44.0, sin(a) * 30.0 - 8.0)
+			draw_circle(sp, 4.0, Color(1.0, 0.85, 0.35, 0.9))
+			draw_circle(sp, 2.0, Color(1.0, 0.97, 0.8, 0.95))

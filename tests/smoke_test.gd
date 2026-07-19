@@ -125,6 +125,21 @@ func _run_tests() -> void:
 	p.velocity = Vector2.ZERO
 	await create_timer(0.1).timeout
 
+	# Star of Levity: pickup stores one air jump; tapping mid-air spends it
+	var star := StarPickup.new()
+	star.global_position = p.global_position
+	main.add_child(star)
+	star._on_body_entered(p)
+	var granted: int = p.air_jumps
+	p.global_position.y -= 500.0
+	p.velocity = Vector2.ZERO
+	await create_timer(0.3).timeout  # fall until floor state and coyote expire
+	var airborne: bool = not p.is_on_floor() and p.coyote <= 0.0
+	p.try_jump()
+	await create_timer(0.1).timeout
+	print("TEST star: granted=%d (expect 1) airborne=%s (expect true) vel_y=%.0f (expect < -500) charges_left=%d (expect 0)" % [
+		granted, airborne, p.velocity.y, p.air_jumps])
+
 	# speed phases: flat until 190 m, then ramps, capped at 780
 	print("TEST speed: d=100 %.0f (expect 470) | d=260 %.0f (expect 533) | d=700 %.0f (expect 780)" % [
 		main.run_speed_for(100.0), main.run_speed_for(260.0), main.run_speed_for(700.0)])
@@ -157,19 +172,20 @@ func _run_tests() -> void:
 	print("TEST phases (40 chunks each):")
 	for d: float in [20.0, 60.0, 100.0, 160.0, 350.0, 550.0]:
 		var s := _probe(d, 40)
-		print("  d=%4dm  mega=%2d  enemies=%2d  maxPerChunk=%d  climbChunks=%2d  voids=%2d  pillars=%2d  minTopY=%4d" % [
+		print("  d=%4dm  mega=%2d  enemies=%2d  maxPerChunk=%d  climbChunks=%2d  voids=%2d  pillars=%2d  stars=%2d  minTopY=%4d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], int(s["min_top"])])
-	print("  expect: d=20 all zeros | d=60 mega~14+ enemies=0 | d=100 enemies>0 climb=0")
+			s["voids"], s["pillars"], s["stars"], int(s["min_top"])])
+	print("  expect: d=20 all zeros | d=60 mega~14+ enemies=0 stars=0 | d=100 enemies>0 climb=0")
 	print("  expect: d=160 climbChunks>0 minTopY<650 | d=350 more enemies, maxPerChunk<=2")
 	print("  expect: d=550 mostly voids, some pillars, no mega/enemies/climb")
+	print("  expect: stars only at 100/160/350 (rare; a few across those bands)")
 	quit()
 
 
 func _probe(d: float, n: int) -> Dictionary:
 	main.distance_m = d
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
-			"voids": 0, "pillars": 0, "min_top": 9999.0}
+			"voids": 0, "pillars": 0, "stars": 0, "min_top": 9999.0}
 	for i in range(n):
 		# pin the spawn cursor so every sampled chunk sits at exactly d meters
 		main.spawner.next_x = d * 100.0 + main.start_x
@@ -184,5 +200,6 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["voids"] += 1
 		if s["pillar"]:
 			stats["pillars"] += 1
+		stats["stars"] += s["stars"]
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 	return stats
