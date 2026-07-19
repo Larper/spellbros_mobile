@@ -184,12 +184,30 @@ func _try_build(world_pos: Vector2) -> void:
 	add_child(plat)
 
 
-func add_coin() -> void:
+func add_coin(amount: int = 1) -> void:
 	if game_over:
 		return
-	coins += 1
+	coins += amount
 	hud.update_coins(coins)
 	audio.play("pickup")
+
+
+## Small world-space text that floats up and fades ("+1", "+3", ...).
+func float_text(world_pos: Vector2, text: String, color: Color) -> void:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", 48)
+	l.add_theme_color_override("font_color", color)
+	l.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.12, 0.85))
+	l.add_theme_constant_override("outline_size", 8)
+	l.position = world_pos + Vector2(-30.0, -70.0)
+	l.z_index = 50
+	add_child(l)
+	var tw := l.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(l, "position:y", l.position.y - 90.0, 0.7)
+	tw.tween_property(l, "modulate:a", 0.0, 0.5).set_delay(0.25)
+	tw.chain().tween_callback(l.queue_free)
 
 
 func _on_player_died() -> void:
