@@ -20,6 +20,7 @@ var dead := false
 var coyote := 0.0
 var jump_buffer := 0.0
 var time_alive := 0.0
+var stomp_jump := false  # stomping an enemy refreshes one jump until landing
 
 
 func _init() -> void:
@@ -47,12 +48,14 @@ func _physics_process(delta: float) -> void:
 
 	if is_on_floor():
 		coyote = COYOTE_TIME
+		stomp_jump = false
 	else:
 		coyote -= delta
 
-	if jump_buffer > 0.0 and coyote > 0.0:
+	if jump_buffer > 0.0 and (coyote > 0.0 or stomp_jump):
 		velocity.y = JUMP_VELOCITY
 		coyote = 0.0
+		stomp_jump = false
 		jump_buffer = 0.0
 		jumped.emit()
 	jump_buffer -= delta
@@ -66,6 +69,7 @@ func try_jump() -> void:
 
 func bounce() -> void:
 	velocity.y = STOMP_BOUNCE
+	stomp_jump = true
 
 
 func die() -> void:
