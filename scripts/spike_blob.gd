@@ -1,13 +1,15 @@
 class_name SpikeBlob
 extends Area2D
 
-## Patrolling enemy. Stomp from above kills it (player bounces and earns
-## +1 mana bounty); touching it from the side or below kills the player.
+## Stationary blob enemy. Stomp from above kills it (player bounces and
+## earns +1 mana bounty); touching it from the side or below kills the
+## player. Blobs used to patrol, but static enemies read far better at
+## late-game run speeds (Neven's call) — and they're plain circles now,
+## no spiky heads.
 
-var speed := 130.0  # set by TerrainSpawner.enemy_speed_for(); ramps late-game
+var speed := 130.0  # kept for spawner compatibility; static blobs ignore it
 var left_x := 0.0
 var right_x := 0.0
-var dir := -1.0
 var t := randf() * TAU
 var dying := false
 
@@ -31,13 +33,6 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	t += delta
 	queue_redraw()
-	if dying:
-		return
-	position.x += speed * dir * delta
-	if position.x < left_x:
-		dir = 1.0
-	elif position.x > right_x:
-		dir = -1.0
 
 
 func _on_body_entered(body: Node2D) -> void:
@@ -73,16 +68,11 @@ func _squash(p: Player) -> void:
 func _draw() -> void:
 	var squish := 1.0 + sin(t * 6.0) * 0.06
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(2.0 - squish, squish))
-	# spikes across the top
-	for i in range(5):
-		var sx := -24.0 + 12.0 * float(i)
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(sx - 6, -16), Vector2(sx + 6, -16), Vector2(sx, -40),
-		]), Color("d63d68"))
-	# body
+	# soft warning glow, then the body — circles only
+	draw_circle(Vector2.ZERO, 36.0, Color(1.0, 0.33, 0.47, 0.16))
 	draw_circle(Vector2.ZERO, 30.0, Color("ff5577"))
-	# eyes track walk direction
+	# eyes, front-facing
 	draw_circle(Vector2(-9, -4), 6.0, Color.WHITE)
 	draw_circle(Vector2(9, -4), 6.0, Color.WHITE)
-	draw_circle(Vector2(-9 + 2.5 * dir, -4), 3.0, Color("1c1430"))
-	draw_circle(Vector2(9 + 2.5 * dir, -4), 3.0, Color("1c1430"))
+	draw_circle(Vector2(-9, -4), 3.0, Color("1c1430"))
+	draw_circle(Vector2(9, -4), 3.0, Color("1c1430"))
