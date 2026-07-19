@@ -68,6 +68,7 @@ func _squash(p: Player) -> void:
 
 
 func _draw() -> void:
+	var th := GameTheme.active
 	var squish := 1.0 + sin(t * 6.0) * 0.06
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(2.0 - squish, squish))
 	# spikes across the top
@@ -75,9 +76,9 @@ func _draw() -> void:
 		var sx := -24.0 + 12.0 * float(i)
 		draw_colored_polygon(PackedVector2Array([
 			Vector2(sx - 6, -16), Vector2(sx + 6, -16), Vector2(sx, -40),
-		]), Color("d63d68"))
+		]), th.color(GameTheme.C_ENEMY_SPIKE))
 	# body
-	draw_circle(Vector2.ZERO, 30.0, Color("ff5577"))
+	draw_circle(Vector2.ZERO, 30.0, th.color(GameTheme.C_ENEMY))
 	# eyes track walk direction
 	draw_circle(Vector2(-9, -4), 6.0, Color.WHITE)
 	draw_circle(Vector2(9, -4), 6.0, Color.WHITE)

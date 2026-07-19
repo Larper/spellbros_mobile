@@ -45,12 +45,14 @@ func _on_body_entered(body: Node2D) -> void:
 
 
 func _draw() -> void:
-	# spin illusion: width oscillates
+	# spin illusion: width oscillates; colors follow the active theme
+	var th := GameTheme.active
+	var body := th.color(GameTheme.C_CRYSTAL)
 	var hw := 16.0 * (0.35 + 0.65 * absf(sin(t * 3.0)))
-	draw_circle(Vector2.ZERO, 30.0, Color(0.32, 0.9, 1.0, 0.10))
+	draw_circle(Vector2.ZERO, 30.0, Color(body, 0.10))
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(0, -24), Vector2(hw, 0), Vector2(0, 24), Vector2(-hw, 0),
-	]), Color("52e5ff"))
+	]), body)
 	draw_colored_polygon(PackedVector2Array([
 		Vector2(0, -12), Vector2(hw * 0.5, 0), Vector2(0, 12), Vector2(-hw * 0.5, 0),
-	]), Color("ccf6ff"))
+	]), th.color(GameTheme.C_CRYSTAL_CORE))

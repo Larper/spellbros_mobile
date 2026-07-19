@@ -18,6 +18,7 @@ var cam: Camera2D
 var spawner: TerrainSpawner
 var hud: Hud
 var audio: GameAudio
+var theme: GameTheme
 
 var coins := START_COINS
 var distance_m := 0.0
@@ -30,11 +31,15 @@ var shake := 0.0
 
 func _ready() -> void:
 	add_to_group("main")
-	RenderingServer.set_default_clear_color(Color("191129"))
 
 	audio = GameAudio.new()
 	add_child(audio)
 	audio.start_music()
+
+	theme = GameTheme.new()
+	add_child(theme)
+	theme.theme_changed.connect(_on_theme_changed)
+	RenderingServer.set_default_clear_color(theme.color(GameTheme.C_BG))
 
 	spawner = TerrainSpawner.new()
 	spawner.main = self
@@ -65,6 +70,10 @@ func _physics_process(delta: float) -> void:
 		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0)
 		player.run_speed = run_speed_for(distance_m)
 		hud.update_score(int(distance_m))
+		theme.advance(distance_m, delta)
+		if theme.dirty:
+			hud.apply_theme(theme.color(GameTheme.C_CRYSTAL),
+					theme.color(GameTheme.C_ENEMY))
 		if player.global_position.y > cam.global_position.y + 820.0:
 			player.die()
 
@@ -86,6 +95,10 @@ func _physics_process(delta: float) -> void:
 		cam.offset = Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
 	else:
 		cam.offset = Vector2.ZERO
+
+
+func _on_theme_changed(_index: int, music_variant: int, music_pitch: float) -> void:
+	audio.set_music_variant(music_variant, music_pitch)
 
 
 func run_speed_for(d: float) -> float:

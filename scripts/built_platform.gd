@@ -41,10 +41,13 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	var th := GameTheme.active
 	var s := SIZE * visual_scale
-	# soft glow
-	draw_rect(Rect2(-s * 0.5 - Vector2(5, 5), s + Vector2(10, 10)), Color(0.32, 0.9, 1.0, 0.22))
+	# soft magic aura in the theme's second accent
+	draw_rect(Rect2(-s * 0.5 - Vector2(5, 5), s + Vector2(10, 10)),
+			Color(th.color(GameTheme.C_ACCENT2), 0.22))
 	# body
-	draw_rect(Rect2(-s * 0.5, s), Color(0.36, 0.85, 1.0, 0.92))
+	draw_rect(Rect2(-s * 0.5, s), Color(th.color(GameTheme.C_PLATFORM), 0.92))
 	# bright top edge
-	draw_rect(Rect2(-s.x * 0.5, -s.y * 0.5, s.x, 5.0 * visual_scale), Color(0.85, 1.0, 1.0, 0.95))
+	draw_rect(Rect2(-s.x * 0.5, -s.y * 0.5, s.x, 5.0 * visual_scale),
+			Color(th.color(GameTheme.C_PLATFORM_EDGE), 0.95))

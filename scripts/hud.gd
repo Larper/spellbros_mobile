@@ -168,6 +168,14 @@ func _label(font_size: int, color: Color) -> Label:
 	return l
 
 
+## Called by Main while the palette is blending: mana readouts follow the
+## crystal color, the warning flash follows the enemy color.
+func apply_theme(crystal: Color, alert: Color) -> void:
+	coin_label.add_theme_color_override("font_color", crystal)
+	best_label.add_theme_color_override("font_color", crystal)
+	no_mana_label.add_theme_color_override("font_color", alert.lightened(0.15))
+
+
 func update_score(m: int) -> void:
 	score_label.text = str(m) + " m"
 

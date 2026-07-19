@@ -20,6 +20,15 @@ func _init(w: float) -> void:
 	add_child(cs)
 
 
+func _ready() -> void:
+	# Chunks draw once and stay static; during palette transitions the
+	# theme manager pokes this group so the new colors actually show.
+	add_to_group("theme_redraw")
+
+
 func _draw() -> void:
-	draw_rect(Rect2(0, 0, width, THICK), Color("332a4d"))
-	draw_rect(Rect2(0, 0, width, 12), Color("7f6ce0"))
+	var th := GameTheme.active
+	draw_rect(Rect2(0, 0, width, THICK), th.color(GameTheme.C_GROUND))
+	# bright walkable-edge line, plus a fainter accent stratum for depth
+	draw_rect(Rect2(0, 0, width, 12), th.color(GameTheme.C_GROUND_EDGE))
+	draw_rect(Rect2(0, 12, width, 5), Color(th.color(GameTheme.C_ACCENT), 0.4))
