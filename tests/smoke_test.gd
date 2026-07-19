@@ -58,10 +58,37 @@ func _run_tests() -> void:
 	var moving: bool = absf(p.global_position.x - x_before) > 1.0
 	print("TEST resume: paused=%s moving=%s (expect false true)" % [paused, moving])
 
-	# audio: 5 synthesized SFX plus a looping music track
-	print("TEST audio: sfx=%d (expect 5) music_len=%.1fs (expect ~8.7) looping=%s" % [
-		main.audio.players.size(), main.audio.music.stream.get_length(),
-		main.audio.music.stream.loop_mode == AudioStreamWAV.LOOP_FORWARD])
+	# audio: 5 synthesized SFX plus mood-variant music loops
+	main.audio._ensure_variants()
+	var variants_ok := true
+	for v in main.audio.music_variants:
+		if v == null or v.loop_mode != AudioStreamWAV.LOOP_FORWARD:
+			variants_ok = false
+	print("TEST audio: sfx=%d (expect 5) music_len=%.1fs (expect ~8.7) variants=%d ok=%s (expect 4 true)" % [
+		main.audio.players.size(), main.audio.music_variants[0].get_length(),
+		main.audio.music_variants.size(), variants_ok])
+
+	# theme: palette index follows distance (every 100 m), colors lerp
+	# smoothly through the transition, and the music variant follows
+	var th = main.theme
+	var pal0_bg: Color = th.palettes[0][GameTheme.C_BG]
+	var pal1_bg: Color = th.palettes[1][GameTheme.C_BG]
+	var variant_before: int = main.audio.current_variant
+	main.distance_m = 150.0
+	await create_timer(0.5).timeout  # mid-transition (TRANSITION_TIME = 1.6)
+	var mid_bg: Color = th.color(GameTheme.C_BG)
+	var mid_lerp: bool = not mid_bg.is_equal_approx(pal0_bg) \
+			and not mid_bg.is_equal_approx(pal1_bg)
+	print("TEST theme: index=%d (expect 1) midlerp=%s (expect true)" % [
+		th.current_index, mid_lerp])
+	await create_timer(1.5).timeout  # transition over
+	var settled_bg: Color = th.color(GameTheme.C_BG)
+	print("TEST themeend: settled=%s bg_ok=%s (expect true true)" % [
+		th.blend >= 1.0, settled_bg.is_equal_approx(pal1_bg)])
+	var front: AudioStreamPlayer = main.audio.music_players[main.audio.active_music]
+	print("TEST thememusic: variant %d -> %d (expect 0 -> 1) stream_ok=%s playing=%s" % [
+		variant_before, main.audio.current_variant,
+		front.stream == main.audio.music_variants[1], front.playing])
 
 	# stall crush: a player stuck behind the advancing camera dies
 	p.global_position.x = main.cam.global_position.x - 1300.0
