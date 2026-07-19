@@ -3,9 +3,14 @@ extends SceneTree
 ## Headless smoke test: run with
 ##   godot --headless --path . -s res://tests/smoke_test.gd
 ## Loads the real game scene, drives its public entry points, then probes
-## the terrain spawner at forced distances to verify the difficulty phases.
+## the terrain spawner at forced distances to verify the difficulty phases
+## and AUDITS every sampled chunk for beatability against the jump math:
+##   flat reach = 0.709 * v ; landing R px higher -> (1170+sqrt(1170^2-6600R))/3300 * v
+##   one built platform bridges 1.418 * v + 240 px.
+## Prints "SMOKE RESULT: PASS" only if every check holds.
 
 var main
+var fails := 0
 
 
 func _initialize() -> void:
@@ -16,12 +21,20 @@ func _initialize() -> void:
 	_run_tests.call_deferred()
 
 
+func _check(ok: bool, label: String) -> void:
+	if not ok:
+		fails += 1
+		print("  FAIL: " + label)
+
+
 func _run_tests() -> void:
 	await create_timer(1.0).timeout
 	var p = main.player
-	print("TEST setup: player=%s on_floor=%s coins=%d (expect 3)" % [p != null, p.is_on_floor(), main.coins])
+	print("TEST setup: player=%s on_floor=%s coins=%d (expect %d = START_COINS)" % [p != null, p.is_on_floor(), main.coins, main.START_COINS])
+	_check(p != null and main.coins == main.START_COINS, "setup")
 
-	# build a platform ahead of the wizard
+	# build a platform ahead of the wizard (seed mana; the run now starts at 0)
+	main.coins = 3
 	var coins_before: int = main.coins
 	main._try_build(Vector2(p.global_position.x + 500.0, p.global_position.y - 120.0))
 	await create_timer(0.1).timeout
@@ -30,12 +43,14 @@ func _run_tests() -> void:
 		if c is BuiltPlatform:
 			plat_count += 1
 	print("TEST build: coins %d -> %d (expect -1), platforms=%d (expect 1)" % [coins_before, main.coins, plat_count])
+	_check(main.coins == coins_before - 1 and plat_count == 1, "build")
 
 	# jump
 	var y_before: float = p.global_position.y
 	p.try_jump()
 	await create_timer(0.25).timeout
 	print("TEST jump: y %.0f -> %.0f (expect lower value = rose)" % [y_before, p.global_position.y])
+	_check(p.global_position.y < y_before, "jump")
 
 	# stomp refresh: bouncing off an enemy grants one air jump until landing
 	p.global_position.y -= 400.0
@@ -45,16 +60,52 @@ func _run_tests() -> void:
 	p.try_jump()
 	await create_timer(0.1).timeout
 	print("TEST stompjump: vel %.0f -> %.0f (expect falling, then jump < -700)" % [fall_vel, p.velocity.y])
+	_check(p.velocity.y < -700.0, "stompjump")
+
+	# camera looks down while falling (descending-staircase visibility);
+	# pin the wizard at a mid-screen height so the clamp floor stays out of it
+	var vy_saved: float = p.velocity.y
+	var y_saved: float = p.global_position.y
+	p.global_position.y = 800.0
+	p.velocity.y = 0.0
+	var t_level: float = main.camera_target_y()
+	p.velocity.y = 900.0
+	var t_fall: float = main.camera_target_y()
+	p.velocity.y = vy_saved
+	p.global_position.y = y_saved
+	print("TEST camfall: target level %.0f, falling %.0f (expect falling >= 200 px lower)" % [t_level, t_fall])
+	_check(t_fall - t_level >= 200.0, "camera fall bias")
 
 	# no-mana path must refuse to build
 	main.coins = 0
 	main.build_cooldown = 0.0
 	main._try_build(Vector2(p.global_position.x + 300.0, 500.0))
 	print("TEST nomana: coins=%d (expect 0, no free platform)" % main.coins)
+	_check(main.coins == 0, "nomana")
 
-	# speed phases: flat until 190 m, then ramps, capped at 780
-	print("TEST speed: d=100 %.0f (expect 470) | d=260 %.0f (expect 533) | d=700 %.0f (expect 780)" % [
-		main.run_speed_for(100.0), main.run_speed_for(260.0), main.run_speed_for(700.0)])
+	# speed: flat before PHASE_SPEED, then ramps at SPEED_RAMP, capped
+	var s0: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED - 10.0)
+	var s1: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED + 100.0)
+	var s2: float = main.run_speed_for(2000.0)
+	print("TEST speed: pre-ramp %.0f (expect %.0f) | +100m %.0f (expect %.0f) | far %.0f (expect cap %.0f)" % [
+		s0, main.BASE_SPEED, s1, main.BASE_SPEED + 100.0 * main.SPEED_RAMP, s2, main.SPEED_CAP])
+	_check(s0 == main.BASE_SPEED, "speed base")
+	_check(absf(s1 - (main.BASE_SPEED + 100.0 * main.SPEED_RAMP)) < 0.01, "speed ramp")
+	_check(s2 == main.SPEED_CAP, "speed cap")
+
+	# late-game platform decay
+	var life_early: float = main.platform_life_for(0.0)
+	var life_late: float = main.platform_life_for(2000.0)
+	print("TEST platlife: early %.1fs (expect %.1f) late %.1fs (expect %.1f)" % [
+		life_early, main.PLATFORM_LIFE, life_late, main.PLATFORM_LIFE_LATE])
+	_check(life_early == main.PLATFORM_LIFE and life_late == main.PLATFORM_LIFE_LATE, "platform decay")
+
+	# enemy speed ramp
+	var es_early: float = main.spawner.enemy_speed_for(TerrainSpawner.PHASE_ENEMY)
+	var es_late: float = main.spawner.enemy_speed_for(2000.0)
+	print("TEST blobspeed: early %.0f (expect %.0f) late %.0f (expect %.0f)" % [
+		es_early, TerrainSpawner.ENEMY_SPEED_BASE, es_late, TerrainSpawner.ENEMY_SPEED_MAX])
+	_check(es_early == TerrainSpawner.ENEMY_SPEED_BASE and es_late == TerrainSpawner.ENEMY_SPEED_MAX, "enemy speed ramp")
 
 	# pause freezes the world, resume unfreezes it
 	var x_before: float = p.global_position.x
@@ -62,10 +113,12 @@ func _run_tests() -> void:
 	await create_timer(0.4).timeout
 	var frozen: bool = absf(p.global_position.x - x_before) < 0.01
 	print("TEST pause: paused=%s frozen=%s (expect true true)" % [paused, frozen])
+	_check(paused and frozen, "pause")
 	main.hud._toggle_pause()
 	await create_timer(0.2).timeout
 	var moving: bool = absf(p.global_position.x - x_before) > 1.0
 	print("TEST resume: paused=%s moving=%s (expect false true)" % [paused, moving])
+	_check(not paused and moving, "resume")
 
 	# audio: 5 synthesized SFX plus mood-variant music loops
 	main.audio._ensure_variants()
@@ -76,6 +129,8 @@ func _run_tests() -> void:
 	print("TEST audio: sfx=%d (expect 5) music_len=%.1fs (expect ~8.7) variants=%d ok=%s (expect 4 true)" % [
 		main.audio.players.size(), main.audio.music_variants[0].get_length(),
 		main.audio.music_variants.size(), variants_ok])
+	_check(main.audio.players.size() == 5, "audio sfx")
+	_check(main.audio.music_variants.size() == 4 and variants_ok, "audio music variants")
 
 	# theme: palette index follows distance (every 100 m), colors lerp
 	# smoothly through the transition, and the music variant follows
@@ -90,44 +145,83 @@ func _run_tests() -> void:
 			and not mid_bg.is_equal_approx(pal1_bg)
 	print("TEST theme: index=%d (expect 1) midlerp=%s (expect true)" % [
 		th.current_index, mid_lerp])
+	_check(th.current_index == 1 and mid_lerp, "theme index + mid-transition lerp")
 	await create_timer(1.5).timeout  # transition over
 	var settled_bg: Color = th.color(GameTheme.C_BG)
 	print("TEST themeend: settled=%s bg_ok=%s (expect true true)" % [
 		th.blend >= 1.0, settled_bg.is_equal_approx(pal1_bg)])
+	_check(th.blend >= 1.0 and settled_bg.is_equal_approx(pal1_bg), "theme settles on target palette")
 	var front: AudioStreamPlayer = main.audio.music_players[main.audio.active_music]
 	print("TEST thememusic: variant %d -> %d (expect 0 -> 1) stream_ok=%s playing=%s" % [
 		variant_before, main.audio.current_variant,
 		front.stream == main.audio.music_variants[1], front.playing])
+	_check(variant_before == 0 and main.audio.current_variant == 1
+			and front.stream == main.audio.music_variants[1] and front.playing,
+			"music mood follows theme")
 
 	# stall crush: a player stuck behind the advancing camera dies
 	p.global_position.x = main.cam.global_position.x - 1300.0
 	await create_timer(0.3).timeout
 	print("TEST crush: dead=%s game_over=%s (expect true true)" % [p.dead, main.game_over])
+	_check(p.dead and main.game_over, "crush")
 
 	await create_timer(1.0).timeout
 	print("TEST endrun: game_over=%s distance=%dm" % [main.game_over, int(main.distance_m)])
 
-	# difficulty phase probes: 40 chunks per distance band
-	print("TEST phases (40 chunks each):")
-	for d: float in [20.0, 60.0, 100.0, 160.0, 350.0, 550.0]:
-		var s := _probe(d, 40)
-		print("  d=%4dm  mega=%2d  enemies=%2d  maxPerChunk=%d  climbChunks=%2d  voids=%2d  pillars=%2d  minTopY=%4d" % [
+	# difficulty phase probes + beatability audit: 80 chunks per distance band
+	print("TEST phases (80 chunks each):")
+	print("  band     mega enem maxEnt climb void pilr  minTop  pace  gap/reach mana/ch builds/ch  bad")
+	for d: float in [15.0, 45.0, 80.0, 130.0, 190.0, 280.0, 380.0, 550.0]:
+		var s := _probe(d, 80)
+		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], int(s["min_top"])])
-	print("  expect: d=20 all zeros | d=60 mega~14+ enemies=0 | d=100 enemies>0 climb=0")
-	print("  expect: d=160 climbChunks>0 minTopY<650 | d=350 more enemies, maxPerChunk<=2")
-	print("  expect: d=550 mostly voids, some pillars, no mega/enemies/climb")
-	quit()
+			s["voids"], s["pillars"], int(s["min_top"]), s["pace"],
+			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
+		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
+		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) or s["voids"] > 0,
+				"entity budget at d=%d" % int(d))
+	# phase-shape expectations, derived from the PHASE_* constants so they
+	# stay valid while tuning configs
+	var pre := _probe(TerrainSpawner.PHASE_BUILD - 10.0, 80)
+	_check(pre["mega"] == 0 and pre["enemies"] == 0 and pre["climbs"] == 0, "pre-phase calm")
+	var early := _probe((TerrainSpawner.PHASE_BUILD + TerrainSpawner.PHASE_ENEMY) * 0.5, 80)
+	_check(early["mega"] >= 20 and early["enemies"] == 0, "megas live before enemies")
+	var mid := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 80)
+	_check(mid["enemies"] > 0 and mid["climbs"] == 0, "enemies live before climbs")
+	var climbb := _probe(TerrainSpawner.PHASE_CLIMB + 30.0, 80)
+	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
+	# compare enemies per ELIGIBLE chunk (climb waves carry no enemies and
+	# would dilute a raw count into a coin flip)
+	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
+	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
+	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
+	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
+
+	print("SMOKE RESULT: %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
+	quit(0 if fails == 0 else 1)
 
 
 func _probe(d: float, n: int) -> Dictionary:
 	main.distance_m = d
+	# reset pattern state so probes are independent of each other
+	main.spawner.climb_dir = 0
+	main.spawner.climb_steps_left = 0
+	main.spawner.flat_chunks_since_wave = 99
+	main.spawner.force_mega = false
+	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
-			"voids": 0, "pillars": 0, "min_top": 9999.0}
+			"voids": 0, "pillars": 0, "min_top": 9999.0, "bad": 0,
+			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
+			"enemy_rate": 0.0}
+	var span := 0.0
+	var ratio_sum := 0.0
+	var ratio_n := 0
+	var eligible := 0
 	for i in range(n):
 		# pin the spawn cursor so every sampled chunk sits at exactly d meters
 		main.spawner.next_x = d * 100.0 + main.start_x
 		var s: Dictionary = main.spawner._spawn_chunk()
+		var v: float = s["speed"]
 		if s["mega"]:
 			stats["mega"] += 1
 		stats["enemies"] += s["enemies"]
@@ -139,4 +233,34 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["pillar"]:
 			stats["pillars"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
+		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
+			eligible += 1
+		span += s["gap"] + s["width"]
+		stats["mana"] += float(s["entities"] - s["enemies"])
+		# --- beatability audit ---
+		var one_build := 1.418 * v + 240.0  # jump + platform deck + jump
+		if s["void"]:
+			stats["builds"] += ceilf(s["gap"] / one_build)
+		elif s["climb"] == -1:
+			stats["builds"] += 1.0  # each up-stair is one platform
+		elif s["mega"]:
+			stats["builds"] += 1.0
+			if s["gap"] > one_build:
+				stats["bad"] += 1
+		elif s["climb"] == 0 or s["climb"] == 1:
+			var rise: float = s["rise"]
+			var disc := 1170.0 * 1170.0 - 6600.0 * rise
+			if disc < 0.0:
+				stats["bad"] += 1  # would need to rise above max jump height
+			else:
+				var reach := v * (1170.0 + sqrt(disc)) / 3300.0
+				ratio_sum += s["gap"] / reach
+				ratio_n += 1
+				if s["gap"] > reach:
+					stats["bad"] += 1
+	stats["pace"] = float(n) / (span / maxf(main.run_speed_for(d), 1.0))
+	stats["gap_ratio"] = ratio_sum / maxf(float(ratio_n), 1.0)
+	stats["mana"] = stats["mana"] / float(n)
+	stats["builds"] = stats["builds"] / float(n)
+	stats["enemy_rate"] = float(stats["enemies"]) / maxf(float(eligible), 1.0)
 	return stats
