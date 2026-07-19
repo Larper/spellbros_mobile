@@ -75,4 +75,48 @@ Scoring: each axis 1-5. **F** = one-finger input fit, **S** = implementation sim
 
 ## Iteration notes
 
-(Filled in as mechanics were built and tested — see bottom of file.)
+**Stomp bounty.** First question was drop *chance*: a 50% probabilistic drop felt more
+"balanced" on paper, but you cannot read a coin flip at 780 px/s — a stomp must always
+pay or players will never risk the detour. Went deterministic. Added a dedicated
+side-hit regression test after realizing the bounty could tempt a bug where touching a
+blob sideways also paid out (it does not: side hits still kill, pay nothing). This
+mechanic introduced the `Main.float_text` popup helper, which the next two mechanics
+reused for free.
+
+**Golden crystal.** Considered guaranteeing the golden over mega gaps (reward bridging)
+but the mega-gap crystal is already a placed reward — stacking certainty there would
+turn "jackpot" into "salary". Kept a flat 10% roll on every spawn so *any* crystal can
+be the exciting one. Measured spawn rate across test runs: 8.5-12% over 400 samples,
+right on target. Expected crystal value rises only 1.0 -> 1.2 mana, so scarcity holds.
+
+**Spring platform.** Two design forks resolved while building:
+- *Launch condition:* "bounce only when falling fast" vs "always launch on landing".
+  Picked always-launch (a trampoline, not a conditional) — one rule, zero ambiguity,
+  and it makes a panic-build spring under your feet a spectacular save.
+- *Anticipation:* a surprise launch off the 4th build could fling you into a spike or
+  past your landing zone, which felt like the game cheating. Fix was the one-line HUD
+  cue "NEXT BUILD: SPRING" shown one build ahead — you always opt in. Also zeroed
+  coyote time on launch so a buffered tap cannot stack a jump onto the spring impulse.
+  Cadence set to every 4th (every 3rd is too frequent against the 4 s platform
+  lifetime — springs should feel banked, not ambient).
+  Headless test measured the launch at -1445 observed velocity vs the -1170 jump.
+
+**Star of Levity.** The plan file's "double-jump for 10 s" was reshaped twice:
+- Timed buffs are invisible under pressure (no player watches a 10 s clock mid-gap), so
+  it became a *stored charge* — state you can see (gold sparkles orbit the wizard) and
+  spend deliberately with the existing tap-the-wizard verb. No new input.
+- One charge, no stacking: a second star while holding one just refreshes to one.
+  Removes all bookkeeping.
+  Implementation detail the headless test surfaced: after teleporting the player into
+  the air, `is_on_floor()` and coyote time both stay warm for a few frames, so a
+  "mid-air" tap can silently take the normal coyote-jump path instead of spending the
+  charge. The branch ordering (coyote jump first, star jump only when truly airborne)
+  is exactly what the test asserts.
+
+**Economy audit after all four.** Income: crystals (placed, budgeted), stomp bounties
+(risk-priced), goldens (rare spike). Spends: builds, with every 4th build also buying a
+launcher, and stars saving a build outright. Nothing mints mana for free; everything
+routes through the existing entity budget or through risk. Max income per chunk is
+unchanged (budget-capped) except the swarm-phase double stomp (+2), which is priced by
+stomping two patrolling blobs back-to-back at speed — kept as a skill-expression
+jackpot, with the bounty amount noted as the tuning lever if runs ever get too rich.
