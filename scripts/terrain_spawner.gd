@@ -30,6 +30,10 @@ const PHASE_VOID := 1800.0  # the endgame after the SPELLBROS level
 const FLIP_CORRIDOR := 560.0  # floor-to-ceiling height in the FLIPSIDE level
 const FLIP_DEAD_CHANCE := 0.25  # dead zones: both surfaces gone, build to cross
 
+## Every level's first ~45 m (3-4 gaps) is a teach-in: the new mechanic in
+## its gentlest form, no ambushes, before the band ramps to full intensity.
+const TEACH_M := 45.0
+
 ## ---- HARD-MODE GAP TUNING -------------------------------------------------
 ## Jump math (Player: GRAVITY 3300, JUMP_VELOCITY -1170):
 ##   full-jump airtime back to takeoff height = 2*1170/3300 = 0.709 s
@@ -138,7 +142,8 @@ func _spawn_chunk() -> Dictionary:
 
 	_update_climb_state(d)
 
-	var mega: bool = climb_dir == 0 and d >= PHASE_BUILD \
+	var teach := _is_teach(d)
+	var mega: bool = not teach and climb_dir == 0 and d >= PHASE_BUILD \
 			and (force_mega or rng.randf() < minf(MEGA_CHANCE_BASE + 0.15 * t, MEGA_CHANCE_MAX))
 	force_mega = false
 	var gap: float
@@ -162,6 +167,11 @@ func _spawn_chunk() -> Dictionary:
 		dy = rng.randf_range(-40.0, 160.0)
 		if d >= PHASE_SWARM and rng.randf() < DOUBLE_MEGA_CHANCE:
 			force_mega = true
+	elif teach:
+		# teach-in: easy gaps, wide decks, near-flat — room to meet the twist
+		gap = rng.randf_range(GAP_MIN_FRAC * v, 0.44 * v)
+		w = rng.randf_range(700.0, 950.0)
+		dy = rng.randf_range(-60.0, 60.0)
 	else:
 		gap = rng.randf_range(GAP_MIN_FRAC * v, GAP_MAX_FRAC * v)
 		w = rng.randf_range(lerpf(520.0, 400.0, t), lerpf(950.0, 640.0, t))
@@ -181,9 +191,10 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
 		used += 1
 
-	# enemies (never on climb stairs — those are about building)
+	# enemies (never on climb stairs — those are about building — and never
+	# in a teach-in stretch)
 	var enemies := 0
-	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0:
+	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not teach:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
 		if rng.randf() < chance:
 			enemies = 1
@@ -246,11 +257,13 @@ func _spawn_chunk() -> Dictionary:
 ## 0.8-1.2*v — beyond any jump, but one solid built platform (they work
 ## from both gravities here) always bridges it. Mana pressure, meet flips.
 func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
-	var ov := 0.30 * v  # shared flip window between consecutive strips
+	var teach := _is_teach(d)
+	# teach-in: wider flip windows, longer strips, no dead zones yet
+	var ov := (0.45 if teach else 0.30) * v
 	var floor_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
 
 	# dead zone: only rolled while the wizard's lane is the floor
-	if flip_on_floor and rng.randf() < FLIP_DEAD_CHANCE:
+	if not teach and flip_on_floor and rng.randf() < FLIP_DEAD_CHANCE:
 		var gap := rng.randf_range(0.8 * v, 1.2 * v)
 		var w := rng.randf_range(0.7 * v, 1.0 * v)
 		var x := next_x + gap
@@ -270,7 +283,7 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 		}
 
 	# chain strip: the opposite surface, starting ov inside the current one
-	var w := rng.randf_range(0.75 * v, 1.1 * v)
+	var w := rng.randf_range(1.1 * v, 1.4 * v) if teach else rng.randf_range(0.75 * v, 1.1 * v)
 	var start := next_x - ov
 	if flip_on_floor:
 		_place_ceiling(start, floor_y - FLIP_CORRIDOR, w)
@@ -297,14 +310,16 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 ## (each stomp refreshes the air jump and pays the +1 bounty) — or spend
 ## 1 mana to bridge the old-fashioned way.
 func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
-	var gap := rng.randf_range(0.75 * v, 1.05 * v)
-	var w := rng.randf_range(280.0, 400.0)
+	# teach-in: the narrowest bridge gaps, wide pillars, always one blob
+	var teach := _is_teach(d)
+	var gap := rng.randf_range(0.75 * v, 0.85 * v) if teach else rng.randf_range(0.75 * v, 1.05 * v)
+	var w := rng.randf_range(400.0, 500.0) if teach else rng.randf_range(280.0, 400.0)
 	var top_y := clampf(last_top_y + rng.randf_range(-60.0, 60.0), BASE_Y_MIN, BASE_Y_MAX)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
 
 	# stepping-stone blobs, one per jump-length of gap, at stomp height
-	var blobs := 1 if gap < 0.9 * v else 2
+	var blobs := 1 if teach or gap < 0.9 * v else 2
 	blobs = mini(blobs, budget)
 	var deck_y := minf(last_top_y, top_y)
 	var seg := gap / float(blobs)
@@ -340,7 +355,9 @@ func _spawn_void_segment() -> Dictionary:
 	var v: float = main.run_speed_for(d)
 	void_y = clampf(void_y + rng.randf_range(-140.0, 140.0), 340.0, 800.0)
 
-	if rng.randf() < 0.3:
+	# teach-in: solid pillars twice as often, shorter fragment trails
+	var teach := _is_teach(d)
+	if rng.randf() < (0.6 if teach else 0.3):
 		# gap as a fraction of live speed (0.62 < 0.709 flat reach) so pillars
 		# stay jumpable no matter what speed the void is entered at
 		var gap := rng.randf_range(0.42 * v, 0.62 * v)
@@ -360,7 +377,7 @@ func _spawn_void_segment() -> Dictionary:
 				"void": false, "pillar": true, "stars": 0,
 				"rise": 0.0, "speed": v}
 
-	var length := rng.randf_range(900.0, 1500.0)
+	var length := rng.randf_range(700.0, 1000.0) if teach else rng.randf_range(900.0, 1500.0)
 	var n := int(length / 380.0) + 1
 	for i in range(n):
 		var cx := next_x + length * (float(i) + 0.5) / float(n)
@@ -382,7 +399,7 @@ func _update_climb_state(d: float) -> void:
 		var springs_lv := Levels.level_for(d) == 1
 		var chance := 0.5 if springs_lv else CLIMB_CHANCE
 		var cooldown := 2 if springs_lv else CLIMB_COOLDOWN
-		if d >= PHASE_CLIMB and last_top_y > 800.0 \
+		if d >= PHASE_CLIMB and last_top_y > 800.0 and not _is_teach(d) \
 				and flat_chunks_since_wave >= cooldown and rng.randf() < chance:
 			climb_dir = -1
 			climb_steps_left = 2 + rng.randi() % 3
@@ -397,6 +414,13 @@ func _update_climb_state(d: float) -> void:
 
 ## Blob patrol speed ramps from PHASE_SWARM so late enemies are harder to
 ## time a stomp on (still well below run speed, so never unavoidable).
+## True inside a level's opening teach-in stretch (never in FOUNDATIONS,
+## which has its own phase curve).
+func _is_teach(d: float) -> bool:
+	var lv := Levels.level_for(d)
+	return lv > 0 and d - Levels.start_m(lv) < TEACH_M
+
+
 func enemy_speed_for(d: float) -> float:
 	var f := clampf((d - PHASE_SWARM) / (ENEMY_SPEED_RAMP_END - PHASE_SWARM), 0.0, 1.0)
 	return lerpf(ENEMY_SPEED_BASE, ENEMY_SPEED_MAX, f)

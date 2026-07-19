@@ -271,20 +271,16 @@ func _run_tests() -> void:
 	_check(flipped and still_flipped and righted \
 			and not flip_pad._cs.one_way_collision, "flipside")
 
-	# no hover-cheese: mid-air, only one banked flip until the next landing
+	# no hover/hop cheese: flips only from a surface or coyote — airborne
+	# taps are refused outright (a mid-air flip is a disguised jump)
 	p.global_position.y -= 400.0
 	p.velocity = Vector2.ZERO
 	await create_timer(0.25).timeout  # airborne, coyote expired
 	p.flip_cooldown = 0.0
 	p.try_flip()
-	var air_flip_ok: bool = p.gravity_dir < 0.0 and p.air_flips == 0
-	p.flip_cooldown = 0.0
-	p.try_flip()  # bank is empty: must be refused
-	print("TEST flipcheese: first_air_flip=%s second_blocked=%s (expect true true)" % [
-		air_flip_ok, p.gravity_dir < 0.0])
-	_check(air_flip_ok and p.gravity_dir < 0.0, "no flip hover cheese")
-	p.gravity_dir = 1.0
-	p.air_flips = 1
+	print("TEST flipcheese: airborne_flip_refused=%s (expect true, gravity unchanged)" % [
+		p.gravity_dir > 0.0])
+	_check(p.gravity_dir > 0.0, "no airborne flip")
 	p.velocity = Vector2.ZERO
 
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
@@ -433,6 +429,18 @@ func _run_tests() -> void:
 	# lighting and the echo bro); the band loop above already audits them
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
+	# teach-ins: every level's first ~45 m is its mechanic in gentle form
+	var teach_spring := _probe(Levels.start_m(Levels.SPRINGS) + 10.0, 80)
+	_check(teach_spring["mega"] == 0 and teach_spring["enemies"] == 0 \
+			and teach_spring["climbs"] == 0, "springs teach-in is calm")
+	var teach_bridge := _probe(Levels.start_m(Levels.BRIDGES) + 10.0, 80)
+	_check(teach_bridge["bridge"] == 80 and teach_bridge["enemies"] == 80,
+			"bridges teach-in: single blobs only")
+	var teach_flip := _probe(Levels.start_m(Levels.FLIPSIDE) + 10.0, 80)
+	_check(teach_flip["flip"] == 80 and teach_flip["dead"] == 0,
+			"flipside teach-in: chains, no dead zones")
+	var teach_void := _probe(TerrainSpawner.PHASE_VOID + 10.0, 80)
+	_check(teach_void["pillars"] > voidb["pillars"], "void teach-in: denser pillars")
 
 	print("SMOKE RESULT: %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	quit(0 if fails == 0 else 1)
