@@ -156,10 +156,13 @@ func _handle_tap(screen_pos: Vector2) -> void:
 	if game_over:
 		_maybe_restart()
 		return
-	var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos
-	if player.tap_rect().has_point(world_pos):
+	# Mobile controls: the wizard splits the screen. Tap anywhere to his
+	# left to jump, anywhere to his right to build a platform there.
+	var player_screen_x: float = (get_canvas_transform() * player.global_position).x
+	if screen_pos.x < player_screen_x:
 		player.try_jump()
 	else:
+		var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos
 		_try_build(world_pos)
 
 

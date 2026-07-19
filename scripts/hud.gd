@@ -42,7 +42,7 @@ func _ready() -> void:
 	coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	hint_label = _label(40, Color(1, 1, 1, 0.9))
-	hint_label.text = "Tap your wizard to JUMP  •  Tap anywhere else to BUILD (1 mana)"
+	hint_label.text = "Tap LEFT of your wizard to JUMP  •  Tap RIGHT to BUILD (1 mana)"
 	root.add_child(hint_label)
 	hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	hint_label.offset_left = -800.0

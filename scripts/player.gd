@@ -89,12 +89,6 @@ func die() -> void:
 	died.emit()
 
 
-func tap_rect() -> Rect2:
-	# Generous hitbox (~2.6x the body) so jump vs. build never misfires.
-	var size := Vector2(BODY_W, BODY_H) * 2.6
-	return Rect2(global_position - size * 0.5, size)
-
-
 func _draw() -> void:
 	var bob := 0.0
 	if not dead and is_on_floor():

@@ -82,6 +82,19 @@ func _run_tests() -> void:
 	print("TEST nomana: coins=%d (expect 0, no free platform)" % main.coins)
 	_check(main.coins == 0, "nomana")
 
+	# mobile controls: tap left of the wizard = jump, tap right = build
+	var wiz_x: float = (main.get_canvas_transform() * p.global_position).x
+	p.jump_buffer = 0.0
+	main._handle_tap(Vector2(wiz_x - 300.0, 500.0))
+	var left_jumps: bool = p.jump_buffer > 0.0
+	main.coins = 1
+	main.build_cooldown = 0.0
+	main._handle_tap(Vector2(wiz_x + 300.0, 500.0))
+	print("TEST taproute: left_jumps=%s (expect true) coins=%d (expect 0, right tap built)" % [
+		left_jumps, main.coins])
+	_check(left_jumps and main.coins == 0, "tap routing")
+	p.jump_buffer = 0.0
+
 	# stomp bounty: squishing a blob pays +1 mana and bounces the player
 	main.coins = 2
 	var blob := SpikeBlob.new(0.0, 100.0)

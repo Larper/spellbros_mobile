@@ -2,7 +2,7 @@ class_name StarPickup
 extends Area2D
 
 ## Star of Levity: grants ONE stored mid-air jump (no stacking, no timer).
-## Tap the wizard while airborne to spend it. Sparkles orbit the wizard
+## Tap to jump while airborne to spend it. Sparkles orbit the wizard
 ## while the charge is held, so you always know you have it.
 
 var t := randf() * TAU
