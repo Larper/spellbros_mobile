@@ -78,12 +78,24 @@ func _on_body_entered(body: Node2D) -> void:
 	if stomped:
 		_squash(p)
 	else:
-		p.die()
+		_lethal(p)
+
+
+## A touch that would kill: the purple shield absorbs one such hit — the
+## bubble pops, the blob pops with it (no bounce, no bounty), the run lives.
+func _lethal(p: Player) -> void:
+	var main = get_tree().get_first_node_in_group("main")
+	if p.shielded:
+		p.break_shield()
+		if main:
+			main.audio.play("squish")
+			main.float_text(global_position, "SHIELD SPENT", Color("b98cff"))
+		_pop()
+		return
+	p.die()
 
 
 func _squash(p: Player) -> void:
-	dying = true
-	set_deferred("monitoring", false)
 	p.bounce()
 	var main = get_tree().get_first_node_in_group("main")
 	if main:
@@ -92,6 +104,13 @@ func _squash(p: Player) -> void:
 		# crystals, so a brave stomp IS the chunk's mana income.
 		main.add_coin()
 		main.float_text(global_position, "+1", Color("52e5ff"))
+	_pop()
+
+
+## Shared death visual: squash-fade, collisions off.
+func _pop() -> void:
+	dying = true
+	set_deferred("monitoring", false)
 	var tw := create_tween()
 	tw.tween_property(self, "scale", Vector2(1.5, 0.15), 0.12)
 	tw.parallel().tween_property(self, "modulate:a", 0.0, 0.18)

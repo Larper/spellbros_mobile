@@ -187,6 +187,34 @@ func _run_tests() -> void:
 	main.game_over = false
 	main.hud.over_root.visible = false
 
+	# purple shield: absorbs exactly one lethal blob touch
+	var sh := ShieldPickup.new()
+	sh.global_position = p.global_position
+	main.add_child(sh)
+	sh._on_body_entered(p)
+	var got_shield: bool = p.shielded
+	var blob4 := SpikeBlob.new(0.0, 100.0)
+	blob4.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(blob4)
+	p.velocity.y = 0.0
+	blob4._on_body_entered(p)
+	var saved: bool = not p.dead and not p.shielded and blob4.dying
+	var blob5 := SpikeBlob.new(0.0, 100.0)
+	blob5.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(blob5)
+	blob5._on_body_entered(p)
+	print("TEST shield: granted=%s saved_once=%s then_lethal=%s (expect all true)" % [
+		got_shield, saved, p.dead])
+	_check(got_shield and saved and p.dead, "shield powerup")
+	blob4.queue_free()
+	blob5.queue_free()
+	p.dead = false
+	p.collision_mask = 1
+	p.rotation = 0.0
+	p.velocity = Vector2.ZERO
+	main.game_over = false
+	main.hud.over_root.visible = false
+
 	# aim assist: a slight horizontal miss, falling past the blob's crown,
 	# still registers as a stomp (the forgiveness Neven asked for)
 	var blob3 := SpikeBlob.new(0.0, 100.0)

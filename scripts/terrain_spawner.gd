@@ -248,13 +248,22 @@ func _spawn_chunk() -> Dictionary:
 		used += 1
 		stars = 1
 
+	# purple shield orb: FOUNDATIONS only — one forgiven blob mistake in the
+	# band that teaches blobs. Mid-deck like the star, same entity budget.
+	var shields := 0
+	if lv == 0 and d >= PHASE_ENEMY and used < budget and stars == 0 \
+			and rng.randf() < 0.07:
+		_place_shield(Vector2(x + rng.randf_range(w * 0.3, w * 0.7), top_y - 150.0))
+		used += 1
+		shields = 1
+
 	var rise := maxf(0.0, last_top_y - top_y)
 	next_x = x + w
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
-		"void": false, "pillar": false, "stars": stars,
+		"void": false, "pillar": false, "stars": stars, "shields": shields,
 		"rise": rise, "speed": v,
 	}
 
@@ -559,6 +568,12 @@ func _place_star(pos: Vector2) -> void:
 	var star := StarPickup.new()
 	star.position = pos
 	add_child(star)
+
+
+func _place_shield(pos: Vector2) -> void:
+	var orb := ShieldPickup.new()
+	orb.position = pos
+	add_child(orb)
 
 
 func _place_coin(pos: Vector2) -> void:
