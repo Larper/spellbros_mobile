@@ -28,8 +28,9 @@ const VOID := 6
 ## var (not const) so tests can point saves at a scratch file
 static var save_path := "user://progress.cfg"
 
-## Dev aid (menu ↑/↓): extra meters credited past the chosen level's start,
-## so a band's late stretch is testable without surviving the whole level.
+## Dev aid (menu wheel or ↑/↓, SHIFT ×100): extra meters credited past the
+## chosen level's start — even past its band's end — so any absolute meter
+## mark is testable without surviving the run up to it.
 static var debug_spawn_m := 0.0
 
 

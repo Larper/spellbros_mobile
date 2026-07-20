@@ -129,20 +129,20 @@ func _ready() -> void:
 ## Start (or restart) the run from the given unlocked level's boundary.
 func begin_run(i: int) -> void:
 	start_level = i
-	cur_level = i
-	announced_level = i
-	# debug_spawn_m (menu ↑/↓): spawn deeper into the band, so late stretches
-	# are testable without surviving everything before them
+	# debug_spawn_m (menu wheel/arrows): spawn deeper in — even past the
+	# chosen band's end — so the true level at the landing spot governs
 	start_offset_m = Levels.start_m(i) + Levels.debug_spawn_m
+	cur_level = Levels.level_for(start_offset_m)
+	announced_level = cur_level
 	distance_m = start_offset_m
 	# any start past 0 m gets a small stake so the terrain there is playable
 	# on arrival (mega gaps demand mana from PHASE_BUILD on)
-	coins = START_COINS if start_offset_m <= 0.0 else 2 + i
+	coins = START_COINS if start_offset_m <= 0.0 else 2 + cur_level
 	hud.update_coins(coins)
 	hud.update_score(int(distance_m))
 	hud.hide_menu()
-	if i > 0:
-		hud.show_level_banner("LEVEL %d: %s" % [i + 1, Levels.level_name(i)])
+	if start_offset_m > 0.0:
+		hud.show_level_banner("LEVEL %d: %s" % [cur_level + 1, Levels.level_name(cur_level)])
 	Main.auto_start_level = i
 	get_tree().paused = false
 
@@ -361,6 +361,7 @@ func _on_player_died() -> void:
 	audio.stop_music()
 	audio.play("death")
 	session_best = maxf(session_best, distance_m)
-	Levels.save_best(start_level, int(distance_m))
+	if Levels.debug_spawn_m <= 0.0:  # debug spawns never pollute the bests
+		Levels.save_best(start_level, int(distance_m))
 	hud.show_game_over(int(distance_m), Levels.best_for(start_level),
 			Levels.level_name(start_level))

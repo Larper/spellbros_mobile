@@ -77,9 +77,15 @@ func _run_tests() -> void:
 	main.begin_run(0)
 	var dbg_mid: bool = main.distance_m == 250.0 and main.start_offset_m == 250.0 \
 			and main.coins == 2 and main.cur_level == 0
+	# a deep offset lands in a LATER level: that level's rules must govern
+	Levels.debug_spawn_m = 1100.0
+	main.begin_run(0)
+	var dbg_deep: bool = main.distance_m == 1100.0 and main.cur_level == Levels.FLIPSIDE \
+			and main.coins == 2 + Levels.FLIPSIDE
 	Levels.debug_spawn_m = 0.0
 	main.begin_run(0)
-	var dbg_zero: bool = main.distance_m == 0.0 and main.coins == main.START_COINS
+	var dbg_zero: bool = main.distance_m == 0.0 and main.coins == main.START_COINS \
+			and main.cur_level == 0
 	Main.auto_start_level = -1
 	main.hud.show_menu(0)
 	var evk := InputEventKey.new()
@@ -87,11 +93,17 @@ func _run_tests() -> void:
 	evk.pressed = true
 	main.hud._unhandled_input(evk)
 	var key_step: bool = Levels.debug_spawn_m == 25.0
+	var evw := InputEventMouseButton.new()
+	evw.button_index = MOUSE_BUTTON_WHEEL_UP
+	evw.pressed = true
+	evw.shift_pressed = true
+	main.hud._spawn_row_input(evw)
+	var wheel_step: bool = Levels.debug_spawn_m == 125.0
 	main.hud.hide_menu()
 	Levels.debug_spawn_m = 0.0
-	print("TEST debugspawn: mid=%s zero=%s key_step=%s (expect all true)" % [
-		dbg_mid, dbg_zero, key_step])
-	_check(dbg_mid and dbg_zero and key_step, "debug late spawn")
+	print("TEST debugspawn: mid=%s deep=%s zero=%s key=%s wheel=%s (expect all true)" % [
+		dbg_mid, dbg_deep, dbg_zero, key_step, wheel_step])
+	_check(dbg_mid and dbg_deep and dbg_zero and key_step and wheel_step, "debug late spawn")
 
 	# build a platform ahead of the wizard (seed mana; the run now starts at 0)
 	main.coins = 3
