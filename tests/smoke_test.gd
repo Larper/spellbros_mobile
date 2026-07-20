@@ -71,6 +71,28 @@ func _run_tests() -> void:
 	print("TEST levels: map_ok=%s persist_ok=%s (expect true true)" % [map_ok, persist_ok])
 	_check(map_ok and persist_ok, "levels api")
 
+	# debug late spawn: the menu's ↑/↓ offset credits meters past the level
+	# start (no awaits here — distance_m must be read before physics runs)
+	Levels.debug_spawn_m = 250.0
+	main.begin_run(0)
+	var dbg_mid: bool = main.distance_m == 250.0 and main.start_offset_m == 250.0 \
+			and main.coins == 2 and main.cur_level == 0
+	Levels.debug_spawn_m = 0.0
+	main.begin_run(0)
+	var dbg_zero: bool = main.distance_m == 0.0 and main.coins == main.START_COINS
+	Main.auto_start_level = -1
+	main.hud.show_menu(0)
+	var evk := InputEventKey.new()
+	evk.keycode = KEY_UP
+	evk.pressed = true
+	main.hud._unhandled_input(evk)
+	var key_step: bool = Levels.debug_spawn_m == 25.0
+	main.hud.hide_menu()
+	Levels.debug_spawn_m = 0.0
+	print("TEST debugspawn: mid=%s zero=%s key_step=%s (expect all true)" % [
+		dbg_mid, dbg_zero, key_step])
+	_check(dbg_mid and dbg_zero and key_step, "debug late spawn")
+
 	# build a platform ahead of the wizard (seed mana; the run now starts at 0)
 	main.coins = 3
 	var coins_before: int = main.coins

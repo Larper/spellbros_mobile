@@ -28,6 +28,10 @@ const VOID := 6
 ## var (not const) so tests can point saves at a scratch file
 static var save_path := "user://progress.cfg"
 
+## Dev aid (menu ↑/↓): extra meters credited past the chosen level's start,
+## so a band's late stretch is testable without surviving the whole level.
+static var debug_spawn_m := 0.0
+
 
 static func count() -> int:
 	return DEFS.size()

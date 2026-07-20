@@ -124,10 +124,13 @@ func begin_run(i: int) -> void:
 	start_level = i
 	cur_level = i
 	announced_level = i
-	start_offset_m = Levels.start_m(i)
+	# debug_spawn_m (menu ↑/↓): spawn deeper into the band, so late stretches
+	# are testable without surviving everything before them
+	start_offset_m = Levels.start_m(i) + Levels.debug_spawn_m
 	distance_m = start_offset_m
-	# later starts get a small stake so the level twist is playable on arrival
-	coins = START_COINS if i == 0 else 2 + i
+	# any start past 0 m gets a small stake so the terrain there is playable
+	# on arrival (mega gaps demand mana from PHASE_BUILD on)
+	coins = START_COINS if start_offset_m <= 0.0 else 2 + i
 	hud.update_coins(coins)
 	hud.update_score(int(distance_m))
 	hud.hide_menu()

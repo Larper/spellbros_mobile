@@ -17,6 +17,7 @@ var final_label: Label
 var best_label: Label
 var restart_label: Label
 var menu_root: Control
+var menu_sub: Label
 var level_list: VBoxContainer
 var banner_label: Label
 
@@ -116,6 +117,16 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key and key.pressed and not key.echo and menu_root.visible \
+			and (key.keycode == KEY_UP or key.keycode == KEY_DOWN):
+		# dev aid: arrows on the menu set a late-spawn offset — the chosen
+		# level then starts that many meters past its boundary
+		var step := 25.0 if key.keycode == KEY_UP else -25.0
+		Levels.debug_spawn_m = clampf(Levels.debug_spawn_m + step, 0.0, 275.0)
+		_update_menu_sub()
+		get_viewport().set_input_as_handled()
+		return
 	if menu_root.visible:
 		return  # the menu owns the screen; only its buttons act
 	if event is InputEventKey and event.pressed and not event.echo \
@@ -162,15 +173,15 @@ func _build_menu(root: Control) -> void:
 	title.offset_bottom = 170.0
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	var sub := _label(40, Color(1, 1, 1, 0.85))
-	sub.text = "Choose your level"
-	sub.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	menu_root.add_child(sub)
-	sub.offset_left = -700.0
-	sub.offset_right = 700.0
-	sub.offset_top = 180.0
-	sub.offset_bottom = 240.0
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	menu_sub = _label(40, Color(1, 1, 1, 0.85))
+	menu_sub.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	menu_root.add_child(menu_sub)
+	menu_sub.offset_left = -700.0
+	menu_sub.offset_right = 700.0
+	menu_sub.offset_top = 180.0
+	menu_sub.offset_bottom = 240.0
+	menu_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_update_menu_sub()
 
 	level_list = VBoxContainer.new()
 	level_list.add_theme_constant_override("separation", 10)
@@ -207,6 +218,12 @@ func show_menu(unlocked: int) -> void:
 		level_list.add_child(b)
 	menu_root.visible = true
 	pause_button.visible = false
+	_update_menu_sub()
+
+
+func _update_menu_sub() -> void:
+	menu_sub.text = "Choose your level" if Levels.debug_spawn_m <= 0.0 \
+			else "Choose your level  •  spawning +%d m in (debug, ↑/↓)" % int(Levels.debug_spawn_m)
 
 
 func hide_menu() -> void:
