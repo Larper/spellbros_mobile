@@ -162,6 +162,7 @@ func _physics_process(delta: float) -> void:
 		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0 + start_offset_m)
 		player.run_speed = run_speed_for(distance_m)
 		hud.update_score(int(distance_m))
+		hud.update_powerups(player.shielded, player.double_jumps > 0)
 		# crossing a level boundary unlocks it as a starting point
 		var lv := Levels.level_for(distance_m)
 		if lv > cur_level:

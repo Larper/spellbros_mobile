@@ -577,8 +577,18 @@ func _run_tests() -> void:
 	main._unhandled_input(evd)
 	print("TEST devgrants: shield=%s jumps=%d (expect true 1)" % [p.shielded, p.double_jumps])
 	_check(p.shielded and p.double_jumps == 1, "S/D dev powerup grants")
+	# the held-powerup readout: the world-space aura child AND the HUD chips
+	# must both light up while a powerup is held, and clear when it's spent
+	await create_timer(0.05).timeout
+	var ind_on: bool = p.aura.visible and p.aura.z_index == 40 \
+			and main.hud.shield_chip.visible and main.hud.star_chip.visible
 	p.shielded = false
 	p.double_jumps = 0
+	await create_timer(0.05).timeout
+	var ind_off: bool = not p.aura.visible \
+			and not main.hud.shield_chip.visible and not main.hud.star_chip.visible
+	print("TEST powerupind: held=%s cleared=%s (expect true true)" % [ind_on, ind_off])
+	_check(ind_on and ind_off, "powerup indicators track the held state")
 
 	# SHIFT+U dev cheat: every level unlocks as a starting point
 	var evu := InputEventKey.new()

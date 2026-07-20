@@ -8,6 +8,8 @@ extends CanvasLayer
 
 var score_label: Label
 var coin_label: Label
+var shield_chip: Label
+var star_chip: Label
 var hint_label: Label
 var no_mana_label: Label
 var pause_button: Button
@@ -45,6 +47,34 @@ func _ready() -> void:
 	coin_label.offset_top = 28.0
 	coin_label.offset_bottom = 120.0
 	coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	# held-powerup readout under the mana counter. The HUD layer provably
+	# renders on every machine (score/mana/float-texts do), so a held
+	# shield or double jump is always announced here, whatever happens to
+	# the world-space aura.
+	shield_chip = _label(40, Color("b98cff"))
+	shield_chip.text = "SHIELD"
+	root.add_child(shield_chip)
+	shield_chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	shield_chip.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	shield_chip.offset_left = -560.0
+	shield_chip.offset_right = -48.0
+	shield_chip.offset_top = 122.0
+	shield_chip.offset_bottom = 172.0
+	shield_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	shield_chip.visible = false
+
+	star_chip = _label(40, Color("ffd75e"))
+	star_chip.text = "DOUBLE JUMP"
+	root.add_child(star_chip)
+	star_chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	star_chip.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	star_chip.offset_left = -560.0
+	star_chip.offset_right = -48.0
+	star_chip.offset_top = 172.0
+	star_chip.offset_bottom = 222.0
+	star_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	star_chip.visible = false
 
 	hint_label = _label(40, Color(1, 1, 1, 0.9))
 	hint_label.text = "Tap LEFT of your wizard to JUMP  •  Tap RIGHT to BUILD (1 mana)"
@@ -350,6 +380,11 @@ func update_score(m: int) -> void:
 
 func update_coins(n: int) -> void:
 	coin_label.text = "MANA " + str(n)
+
+
+func update_powerups(sh: bool, dj: bool) -> void:
+	shield_chip.visible = sh
+	star_chip.visible = dj
 
 
 func flash_no_mana() -> void:
