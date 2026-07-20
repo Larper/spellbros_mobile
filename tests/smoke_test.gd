@@ -501,9 +501,10 @@ func _run_tests() -> void:
 				if cc is PointLight2D:
 					beacon = true
 			c.queue_free()
-	print("TEST umbra: dark=%s lantern=%s beacon=%s (expect all true)" % [
-		dark_ok, lantern_lit, beacon])
+	print("TEST umbra: dark=%s lantern=%s beacon=%s halo=%.2f (expect all true, halo > 3.4)" % [
+		dark_ok, lantern_lit, beacon, main.wizard_light.texture_scale])
 	_check(dark_ok and lantern_lit and beacon, "umbra darkness")
+	_check(main.wizard_light.texture_scale > 3.4, "umbra halo widened")
 
 	# SPELLBROS: the echo brother activates, mirrors, and banks crystals
 	main.distance_m = 1600.0
@@ -677,8 +678,10 @@ func _run_tests() -> void:
 	_check(flipb["mana"] >= flipb["builds"] * 0.8, "flipside build economy")
 	# and the crystals draw the flip line: transit-arc trails on most chains
 	_check(flipb["arc"] > 20, "flipside crystals ride the flip arcs")
-	# UMBRA and SPELLBROS run the standard generator (their twists live in
-	# lighting and the echo bro); the band loop above already audits them
+	# UMBRA runs the standard generator but RICH: deck-start beacons plus a
+	# raised crystal chance, because mana is sight there (Neven: it starved)
+	var umbrab := _probe(Levels.start_m(Levels.UMBRA) + 100.0, 80)
+	_check(umbrab["mana"] >= 0.8, "umbra runs rich in fragments")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 	# teach-ins: every level's first ~45 m is its mechanic in gentle form

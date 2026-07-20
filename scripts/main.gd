@@ -91,10 +91,11 @@ func _ready() -> void:
 	player.sprung.connect(func() -> void: audio.play("boing"))
 	add_child(player)
 	start_x = player.global_position.x
-	# tight halo: in pitch-black UMBRA the wizard sees barely one gap ahead —
-	# scouting the way means spending mana on lantern-platforms (they carry
-	# a 420 px light), so building becomes seeing
-	wizard_light = PsyTheme.make_light(300.0, 1.05)
+	# UMBRA halo: wide enough to read the next gap's near edge (the old
+	# 300 px saw barely past the wizard's feet and starved runs — Neven);
+	# the dark still owns everything past it, so lantern-builds stay the
+	# scouting tool
+	wizard_light = PsyTheme.make_light(460.0, 1.2)
 	wizard_light.enabled = false
 	player.add_child(wizard_light)
 

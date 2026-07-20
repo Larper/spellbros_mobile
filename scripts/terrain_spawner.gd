@@ -223,6 +223,14 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
 		used += 1
 
+	# UMBRA: a lit fragment at the START of most decks — the beacon marks
+	# where footing begins, and the richer income funds the lantern-builds
+	# that sight demands (Neven: the dark band starved and killed; light
+	# must be affordable). Rolled before enemies so light wins the budget.
+	if lv == Levels.UMBRA and used < budget and rng.randf() < 0.9:
+		_place_coin(Vector2(x + 90.0, top_y - 60.0))
+		used += 1
+
 	# enemies (never on climb stairs — those are about building — and never
 	# in a teach-in stretch)
 	var enemy_before := enemy_seen  # the shield gate reads the PRE-chunk state
@@ -256,8 +264,10 @@ func _spawn_chunk() -> Dictionary:
 		enemy_seen = true
 
 	# at most one crystal on the chunk itself; climb steps pay out more
-	# reliably so stairs stay affordable
+	# reliably so stairs stay affordable. UMBRA runs rich: mana is sight.
 	var mana_chance := MANA_CHANCE_CLIMB if climb_dir != 0 else MANA_CHANCE
+	if lv == Levels.UMBRA:
+		mana_chance = 0.65
 	if used < budget and rng.randf() < mana_chance:
 		var coin_y := top_y - 60.0 if rng.randf() < 0.7 else top_y - 250.0
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
