@@ -22,7 +22,7 @@ var dead := false
 var coyote := 0.0
 var jump_buffer := 0.0
 var time_alive := 0.0
-var air_jumps := 0  # Star of Levity charge: one stored mid-air jump
+var double_jumps := 0  # Star of Levity charge: one stored double jump
 var stomp_jump := false  # stomping an enemy refreshes one jump until landing
 var gravity_dir := 1.0  # FLIPSIDE: -1 runs the ceiling; +1 the floor
 var flip_cooldown := 0.0
@@ -78,10 +78,10 @@ func _physics_process(delta: float) -> void:
 		stomp_jump = false
 		jump_buffer = 0.0
 		jumped.emit()
-	elif jump_buffer > 0.0 and air_jumps > 0 and not is_on_floor():
-		# spend the Star of Levity charge for a full mid-air jump
+	elif jump_buffer > 0.0 and double_jumps > 0 and not is_on_floor():
+		# spend the Star of Levity charge for a full double jump
 		velocity.y = JUMP_VELOCITY * gravity_dir
-		air_jumps -= 1
+		double_jumps -= 1
 		jump_buffer = 0.0
 		jumped.emit()
 	jump_buffer -= delta
@@ -157,8 +157,8 @@ func _draw() -> void:
 		var step := sin(time_alive * 20.0)
 		draw_rect(Rect2(-16 + step * 5.0, 38, 12, 6), Color("2f2650"))
 		draw_rect(Rect2(6 - step * 5.0, 38, 12, 6), Color("2f2650"))
-	# Star of Levity charge: gold sparkles orbit while an air jump is stored
-	if air_jumps > 0:
+	# Star of Levity charge: gold sparkles orbit while a double jump is stored
+	if double_jumps > 0:
 		for i in range(3):
 			var a := time_alive * 3.0 + TAU * float(i) / 3.0
 			var sp := Vector2(cos(a) * 44.0, sin(a) * 30.0 - 8.0)

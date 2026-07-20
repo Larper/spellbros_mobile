@@ -209,12 +209,12 @@ func _run_tests() -> void:
 	p.velocity = Vector2.ZERO
 	await create_timer(0.1).timeout
 
-	# Star of Levity: pickup stores one air jump; tapping mid-air spends it
+	# Star of Levity: pickup stores one double jump; tapping mid-air spends it
 	var star := StarPickup.new()
 	star.global_position = p.global_position
 	main.add_child(star)
 	star._on_body_entered(p)
-	var granted: int = p.air_jumps
+	var granted: int = p.double_jumps
 	p.global_position.y -= 500.0
 	p.velocity = Vector2.ZERO
 	await create_timer(0.3).timeout  # fall until floor state and coyote expire
@@ -222,8 +222,8 @@ func _run_tests() -> void:
 	p.try_jump()
 	await create_timer(0.1).timeout
 	print("TEST star: granted=%d (expect 1) airborne=%s (expect true) vel_y=%.0f (expect < -500) charges_left=%d (expect 0)" % [
-		granted, airborne, p.velocity.y, p.air_jumps])
-	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.air_jumps == 0,
+		granted, airborne, p.velocity.y, p.double_jumps])
+	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.double_jumps == 0,
 			"star of levity")
 
 	# SPRINGS level: builds inside its band are launcher pads, outside not

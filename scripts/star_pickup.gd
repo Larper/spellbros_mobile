@@ -1,7 +1,7 @@
 class_name StarPickup
 extends Area2D
 
-## Star of Levity: grants ONE stored mid-air jump (no stacking, no timer).
+## Star of Levity: grants ONE stored double jump (no stacking, no timer).
 ## Tap to jump while airborne to spend it. Sparkles orbit the wizard
 ## while the charge is held, so you always know you have it.
 
@@ -36,11 +36,11 @@ func _on_body_entered(body: Node2D) -> void:
 		return
 	collected = true
 	set_deferred("monitoring", false)
-	p.air_jumps = 1
+	p.double_jumps = 1
 	var main = get_tree().get_first_node_in_group("main")
 	if main:
 		main.audio.play("pickup")
-		main.float_text(global_position, "AIR JUMP!", Color("ffd75e"))
+		main.float_text(global_position, "DOUBLE JUMP!", Color("ffd75e"))
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(self, "scale", Vector2(2.0, 2.0), 0.15)

@@ -36,8 +36,8 @@ the opening teaches you to be greedy.
   **4.0 s** early game, shrinking to **2.4 s** between 300–600 m. Collision is
   full-size instantly, so a panic-build under your feet saves you.
 - **Enemies (blobs)** — glowing circles that sit still where they spawn;
-  stomp from above kills them (and refreshes one mid-air jump until you
-  land), any other touch kills you.
+  stomp from above kills them (and refreshes one jump until you land),
+  any other touch kills you.
 - **Crush camera** — the camera never waits. It holds a lead while you keep
   pace but keeps rolling (at 85% run speed) if you stall; fall behind the left
   screen edge and you die. Stalling to build stairs is a calculated risk.
@@ -54,7 +54,7 @@ the opening teaches you to be greedy.
 | Pickup | Looks | Where | Effect |
 |---|---|---|---|
 | Mana crystal | cyan diamond | everywhere (scarce) | +1 mana |
-| Star of Levity | gold star, hung high | from 50 m, 8% of chunks | stores **one mid-air jump**; gold sparkles orbit you while held; stomp refresh is spent before the star so it's never wasted |
+| Star of Levity | gold star, mid-deck | from 50 m, on enemy-free decks | stores **one double jump**; gold sparkles orbit you while held; stomp refresh is spent before the star so it's never wasted |
 | Spring powerup | green coil | from 300 m, 8% of chunks + 20% of void pillars | your **next 3 builds are spring pads** (still 1 mana) that launch you at ~1.6× jump height on landing; HUD counts SPRING x3 → x1 |
 
 ## Level layout — the difficulty phases

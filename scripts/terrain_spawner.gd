@@ -238,11 +238,13 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
 		used += 1
 
-	# rare Star of Levity: a stored air-jump, hung high to invite a leap.
-	# Competes for the same entity budget so it never inflates the economy.
+	# rare Star of Levity: a stored double jump. Hung over the SAFE middle of
+	# an enemy-free deck at plain-jump height — the old high, edge-hugging,
+	# blob-adjacent spots read as bait (Neven). Same entity budget.
 	var stars := 0
-	if d >= PHASE_ENEMY and used < budget and rng.randf() < 0.08:
-		_place_star(Vector2(x + rng.randf_range(100.0, w - 100.0), top_y - 280.0))
+	if d >= PHASE_ENEMY and used < budget and enemies == 0 and not mega \
+			and rng.randf() < 0.1:
+		_place_star(Vector2(x + rng.randf_range(w * 0.3, w * 0.7), top_y - 190.0))
 		used += 1
 		stars = 1
 
