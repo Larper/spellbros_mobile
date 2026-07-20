@@ -38,13 +38,16 @@ func _process(delta: float) -> void:
 	var dark := clampf((d - (Levels.start_m(Levels.UMBRA) - 60.0)) / 55.0, 0.0, 1.0) \
 			- clampf((d - Levels.start_m(Levels.BROS)) / 30.0, 0.0, 1.0)
 	dark = clampf(dark, 0.0, 1.0)
-	# lights-out target still thumps faintly with the kick
-	var v := 0.10 + 0.05 * pulse
+	# lights-out target: PITCH black (Neven: UMBRA played like a faster
+	# FOUNDATIONS — now unlit stretches are truly invisible, and sight
+	# itself is the resource: crystals beacon, built platforms are the
+	# lanterns you throw ahead to find the way). Still thumps faintly.
+	var v := 0.03 + 0.02 * pulse
 	var lite := Color.from_hsv(hue, 0.32 - 0.22 * pulse, 1.0)
 	var lite_bg := Color.from_hsv(fmod(hue + 0.5, 1.0), 0.6, 0.10 + 0.10 * pulse)
 	color = lite.lerp(Color(v, v, v * 1.25), dark)
 	RenderingServer.set_default_clear_color(
-			lite_bg.lerp(Color(0.01, 0.008, 0.02), dark))
+			lite_bg.lerp(Color(0.004, 0.003, 0.01), dark))
 
 
 ## Warm point light used by the wizard, crystals and lantern-platforms in

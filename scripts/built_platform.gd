@@ -36,7 +36,9 @@ func _ready() -> void:
 	if solid:
 		_cs.one_way_collision = false
 	if lit:
-		add_child(PsyTheme.make_light(360.0, 1.1))
+		# UMBRA lantern: out-shines the wizard's own halo — thrown ahead,
+		# a build reveals the next stretch of the way
+		add_child(PsyTheme.make_light(420.0, 1.2))
 	var t := create_tween().set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.tween_property(self, "visual_scale", 1.0, 0.18)
 
