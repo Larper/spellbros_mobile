@@ -10,7 +10,7 @@ const BUILD_COOLDOWN := 0.15
 ## Thumbs are imprecise and tend to land right of where the player aims, so
 ## every touch-build is nudged this many world px left of the tap (~one thumb
 ## width at the current zoom). Tuning knob from Neven's phone playtests.
-const BUILD_TOUCH_NUDGE := 90.0
+const BUILD_TOUCH_NUDGE := 0
 
 ## ---- HARD-MODE SPEED / PLATFORM TUNING ------------------------------------
 ## Speed ramps from TerrainSpawner.PHASE_SPEED. The spawner sizes all normal
