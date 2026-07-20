@@ -305,31 +305,49 @@ func _spawn_spring_chunk(d: float, v: float) -> Dictionary:
 	}
 
 
-## The void crossing between deck sections: open sky far beyond any jump,
-## with a diagonal trail of fragments rising toward a higher far deck. The
-## intended move: drop ONE spring pad in the gap (every build here launches
-## at -1500, a 341 px rise), ride the launch up the fragment diagonal, land
-## on the next deck section. The 3-crystal trail out-pays the 1-mana pad.
+## The void crossing between deck sections (Neven round 3: DOUBLE the old
+## width — one lazy pad was never a real reason to build). Far beyond any
+## single launch: the line is run off the edge, pad, launch, second pad AT
+## THE APEX, launch again, land the higher far deck. The fragment trail is
+## sampled from that exact two-arc flight path (launch -1500, gravity 3300),
+## so flying the intended line sweeps the crystals up naturally — and one
+## fragment near the apex is sometimes the ORANGE +3, funding both pads
+## with interest.
 func _spawn_spring_void(d: float, v: float) -> Dictionary:
 	var teach := _is_teach(d)
 	spring_deck_left = 2 + rng.randi() % 3  # 2-4 easy pillars follow
-	var gap := (rng.randf_range(0.65, 0.8) if teach else rng.randf_range(0.8, 1.0)) * v
-	var up := rng.randf_range(60.0, 120.0) if teach else rng.randf_range(100.0, 200.0)
-	var w := rng.randf_range(420.0, 540.0) if teach else rng.randf_range(380.0, 500.0)
-	var far_y := clampf(last_top_y - up, 360.0, 900.0)
+	var gap := (rng.randf_range(1.1, 1.3) if teach else rng.randf_range(1.45, 1.7)) * v
+	var up := rng.randf_range(80.0, 160.0) if teach else rng.randf_range(100.0, 220.0)
+	var w := rng.randf_range(420.0, 540.0)
+	var far_y := clampf(last_top_y - up, 340.0, 900.0)
 	var rise := maxf(0.0, last_top_y - far_y)
 	var x := next_x + gap
 	_place_chunk(x, far_y, w)
-	# the fragment diagonal: takeoff edge up to the far deck's crown
-	for i in range(3):
-		var f := (float(i) + 1.0) / 4.0
-		_place_coin(Vector2(next_x + gap * f,
-				lerpf(last_top_y - 90.0, far_y - 110.0, f)))
+	# pad 1 lands ~1/4 in (a beat of falling after running off, ~60 px down);
+	# arc 1 peaks 0.45 s later at 341-60=281 px above takeoff, where pad 2 goes
+	var y0 := last_top_y
+	var pad1_x := 0.25 * gap
+	var apex_x := pad1_x + 0.45 * v
+	for i in range(5):
+		var fx := gap * (0.34 + 0.15 * float(i))
+		var tau: float
+		var fy: float
+		if fx <= apex_x:
+			tau = (fx - pad1_x) / v
+			fy = y0 + 60.0 - (1500.0 * tau - 1650.0 * tau * tau)
+		else:
+			tau = (fx - apex_x) / v
+			fy = y0 - 281.0 - (1500.0 * tau - 1650.0 * tau * tau)
+		var pos := Vector2(next_x + fx, fy)
+		if i == 2 and rng.randf() < 0.3:
+			_place_coin(pos, 3)  # the orange, riding the highest stretch
+		else:
+			_place_coin(pos)
 	next_x = x + w
 	last_top_y = far_y
 	return {
 		"gap": gap, "width": w, "top_y": far_y, "mega": false,
-		"enemies": 0, "entities": 3, "climb": 0,
+		"enemies": 0, "entities": 5, "climb": 0,
 		"void": false, "pillar": false, "spring": true, "svoid": true,
 		"stars": 0, "rise": rise, "speed": v,
 	}
@@ -576,8 +594,9 @@ func _place_shield(pos: Vector2) -> void:
 	add_child(orb)
 
 
-func _place_coin(pos: Vector2) -> void:
+func _place_coin(pos: Vector2, amount: int = 1) -> void:
 	var coin := ManaCrystal.new()
+	coin.amount = amount
 	coin.position = pos
 	# UMBRA: crystals carry their own light so they beacon through the dark
 	var d: float = (pos.x - main.start_x) / 100.0 + main.start_offset_m

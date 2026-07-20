@@ -29,8 +29,9 @@ func _process(delta: float) -> void:
 	for c in main.spawner.get_children():
 		if c is ManaCrystal and not c.collected \
 				and c.global_position.distance_to(global_position) < COLLECT_RADIUS:
-			c.collect()
-			main.float_text(c.global_position, "+1", Color("7ef2e0"))
+			c.collect()  # the orange +3 already floats its own text
+			if c.amount == 1:
+				main.float_text(c.global_position, "+1", Color("7ef2e0"))
 
 
 func _draw() -> void:

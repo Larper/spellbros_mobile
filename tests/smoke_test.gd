@@ -254,6 +254,16 @@ func _run_tests() -> void:
 	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.double_jumps == 0,
 			"star of levity")
 
+	# orange fragment: a single crystal worth +3 mana
+	main.coins = 0
+	var oc := ManaCrystal.new()
+	oc.amount = 3
+	main.add_child(oc)
+	oc.collect()
+	print("TEST orange: coins=%d (expect 3)" % main.coins)
+	_check(main.coins == 3, "orange fragment +3")
+	oc.queue_free()
+
 	# SPRINGS level: builds inside its band are launcher pads, outside not
 	main.distance_m = 350.0
 	main.coins = 2
@@ -469,7 +479,10 @@ func _run_tests() -> void:
 			int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
-		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) or s["voids"] > 0,
+		# spring crossings (5-fragment arc trails) are exempt like the void:
+		# their trails ARE the pad economy, not chunk clutter
+		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) \
+				or s["voids"] > 0 or s["svoid"] > 0,
 				"entity budget at d=%d" % int(d))
 	# level/phase-shape expectations, derived from the constants so they
 	# stay valid while tuning configs
@@ -598,13 +611,12 @@ func _probe(d: float, n: int) -> Dictionary:
 				stats["bad"] += 1
 		elif s.get("spring", false):
 			if s.get("svoid", false):
-				# void crossing: one pad dropped in the gap (reachable by a
-				# jump covering ~0.45*v of it), then the -1500 spring arc
-				# onto the higher far deck; assume ~60 px of fall onto the
-				# pad before it fires
-				stats["builds"] += 1.0
-				var t_sp := (1500.0 + sqrt(maxf(0.0, 2250000.0 - 6600.0 * (s["rise"] + 60.0)))) / 3300.0
-				if s["rise"] > 260.0 or s["gap"] > (0.45 + 0.92 * t_sp) * v:
+				# two-pad crossing: jump/fall to pad 1 (~0.42*v in), half an
+				# arc to its apex (0.45*v, 241 px above takeoff), then a full
+				# second launch from apex height down/up to the far deck
+				stats["builds"] += 2.0
+				var t_sp := (1500.0 + sqrt(maxf(0.0, 2250000.0 - 6600.0 * (s["rise"] - 241.0)))) / 3300.0
+				if s["rise"] > 260.0 or s["gap"] > (0.42 + 0.45 + 0.92 * t_sp) * v:
 					stats["bad"] += 1
 			else:
 				# deck pillar: a plain jump must clear it

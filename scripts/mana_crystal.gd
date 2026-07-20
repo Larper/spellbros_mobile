@@ -1,11 +1,13 @@
 class_name ManaCrystal
 extends Area2D
 
-## Spinning mana diamond. Overlap with the player collects it (+1 coin).
+## Spinning mana diamond. Overlap with the player collects it (+amount).
+## amount > 1 draws the rare ORANGE fragment (SPRINGS: +3, pays pad tolls).
 
 var t := randf() * TAU
 var collected := false
 var lit := false  # UMBRA: crystals beacon through the dark
+var amount := 1
 
 
 func _init() -> void:
@@ -45,7 +47,9 @@ func collect() -> void:
 	set_deferred("monitoring", false)
 	var main = get_tree().get_first_node_in_group("main")
 	if main:
-		main.add_coin()
+		main.add_coin(amount)
+		if amount > 1:
+			main.float_text(global_position, "+%d" % amount, Color("ffb14d"))
 	var tw := create_tween()
 	tw.set_parallel(true)
 	tw.tween_property(self, "scale", Vector2(1.8, 1.8), 0.15)
@@ -54,12 +58,17 @@ func collect() -> void:
 
 
 func _draw() -> void:
-	# spin illusion: width oscillates
-	var hw := 16.0 * (0.35 + 0.65 * absf(sin(t * 3.0)))
-	draw_circle(Vector2.ZERO, 30.0, Color(0.32, 0.9, 1.0, 0.10))
+	# spin illusion: width oscillates; the +3 orange runs bigger and warmer
+	var big := amount > 1
+	var r := 22.0 if big else 16.0
+	var hw := r * (0.35 + 0.65 * absf(sin(t * 3.0)))
+	var halo := Color(1.0, 0.62, 0.2, 0.14) if big else Color(0.32, 0.9, 1.0, 0.10)
+	var body := Color("ff9a3d") if big else Color("52e5ff")
+	var core := Color("ffe0b8") if big else Color("ccf6ff")
+	draw_circle(Vector2.ZERO, r + 14.0, halo)
 	draw_colored_polygon(PackedVector2Array([
-		Vector2(0, -24), Vector2(hw, 0), Vector2(0, 24), Vector2(-hw, 0),
-	]), Color("52e5ff"))
+		Vector2(0, -r - 8), Vector2(hw, 0), Vector2(0, r + 8), Vector2(-hw, 0),
+	]), body)
 	draw_colored_polygon(PackedVector2Array([
-		Vector2(0, -12), Vector2(hw * 0.5, 0), Vector2(0, 12), Vector2(-hw * 0.5, 0),
-	]), Color("ccf6ff"))
+		Vector2(0, -r * 0.5), Vector2(hw * 0.5, 0), Vector2(0, r * 0.5), Vector2(-hw * 0.5, 0),
+	]), core)
