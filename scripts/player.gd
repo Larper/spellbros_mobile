@@ -175,10 +175,13 @@ func _draw() -> void:
 				Color(0.8, 0.62, 1.0, 0.85 + 0.15 * sp_pulse), 7.0)
 		draw_arc(Vector2(0, -8), 51.0, 0.0, TAU, 48,
 				Color(0.92, 0.84, 1.0, 0.3 + 0.3 * sp_pulse), 3.0)
-	# Star of Levity charge: gold sparkles orbit while a double jump is stored
+	# Star of Levity charge: three gold orbs circle the wizard while a double
+	# jump is stored. The old 4 px sparkles were invisible at run speed
+	# (Neven) — these are fat glowing circles that read from across the room.
 	if double_jumps > 0:
 		for i in range(3):
 			var a := time_alive * 3.0 + TAU * float(i) / 3.0
-			var sp := Vector2(cos(a) * 44.0, sin(a) * 30.0 - 8.0)
-			draw_circle(sp, 4.0, Color(1.0, 0.85, 0.35, 0.9))
-			draw_circle(sp, 2.0, Color(1.0, 0.97, 0.8, 0.95))
+			var sp := Vector2(cos(a) * 52.0, sin(a) * 36.0 - 8.0)
+			draw_circle(sp, 13.0, Color(1.0, 0.85, 0.35, 0.35))
+			draw_circle(sp, 8.0, Color(1.0, 0.85, 0.35, 0.95))
+			draw_circle(sp, 4.0, Color(1.0, 0.97, 0.8, 1.0))
