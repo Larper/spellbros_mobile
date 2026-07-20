@@ -531,37 +531,45 @@ func _run_tests() -> void:
 	_check(dark_ok and lantern_lit and beacon, "umbra darkness")
 	_check(main.wizard_light.texture_scale > 3.4, "umbra halo widened")
 
-	# SPELLBROS: the crimson brother hovers overhead and burns the blob
-	# ahead for 1 mana; with a dry pool he burns nothing and blobs are
-	# lethal again (the pressure that makes the gauntlet a level)
+	# SPELLBROS: the crimson brother is a mana-fueled shield — a lethal
+	# touch is burned for 1 mana, a stomp costs nothing (it's income), and
+	# a dry pool leaves the touch lethal
 	main.distance_m = 1600.0
-	for n in get_nodes_in_group("blobs"):  # (self IS the SceneTree here)
-		n.queue_free()  # clear strays so the burn test targets OUR blob
 	await create_timer(0.1).timeout
 	var bro_on: bool = main.bro.active and main.bro.visible
 	main.coins = 2
 	main.hud.update_coins(main.coins)
-	main.bro.burn_cd = 0.0
 	var bblob := SpikeBlob.new(0.0, 100.0)
-	bblob.global_position = p.global_position + Vector2(380.0, -20.0)
+	bblob.global_position = p.global_position + Vector2(60.0, 0.0)
 	main.add_child(bblob)
-	await create_timer(0.15).timeout
-	var burned: bool = bblob.dying and main.coins == 1
+	p.velocity.y = 0.0
+	bblob._on_body_entered(p)
+	var guarded: bool = not p.dead and bblob.dying and main.coins == 1
+	var sblob := SpikeBlob.new(0.0, 100.0)
+	sblob.global_position = p.global_position + Vector2(0.0, 60.0)
+	main.add_child(sblob)
+	p.velocity.y = 300.0  # falling onto it: a stomp, never a burn
+	sblob._on_body_entered(p)
+	var stomp_free: bool = not p.dead and sblob.dying and main.coins == 2
 	main.coins = 0
 	main.hud.update_coins(main.coins)
-	main.bro.burn_cd = 0.0
-	var bblob2 := SpikeBlob.new(0.0, 100.0)
-	bblob2.global_position = p.global_position + Vector2(380.0, -20.0)
-	main.add_child(bblob2)
-	await create_timer(0.15).timeout
-	var dry_holds: bool = not bblob2.dying
-	print("TEST spellbro: active=%s burned=%s (expect true true) dry_no_burn=%s (expect true)" % [
-		bro_on, burned, dry_holds])
-	_check(bro_on and burned and dry_holds, "spellbro burns with mana")
-	if is_instance_valid(bblob):  # the burn's pop tween already freed it
-		bblob.queue_free()
-	if is_instance_valid(bblob2):
-		bblob2.queue_free()
+	var dblob := SpikeBlob.new(0.0, 100.0)
+	dblob.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(dblob)
+	p.velocity.y = 0.0
+	dblob._on_body_entered(p)
+	print("TEST spellbro: active=%s guarded=%s stomp_free=%s dry_lethal=%s (expect all true)" % [
+		bro_on, guarded, stomp_free, p.dead])
+	_check(bro_on and guarded and stomp_free and p.dead, "spellbro guards for mana")
+	bblob.queue_free()
+	sblob.queue_free()
+	dblob.queue_free()
+	p.dead = false
+	p.collision_mask = 1
+	p.rotation = 0.0
+	p.velocity = Vector2.ZERO
+	main.game_over = false
+	main.hud.over_root.visible = false
 	main.distance_m = 20.0
 
 	# S / D dev keys grant the shield and the double jump on demand

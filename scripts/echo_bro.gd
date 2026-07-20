@@ -1,30 +1,24 @@
 class_name EchoBro
 extends Node2D
 
-## SPELLBROS level (Neven's spec, round 2 — the mirror echo read as silly):
-## the crimson spellbrother hovers over the wizard's shoulder and BURNS the
-## blob ahead, spending 1 shared mana per burn. While the pool lasts the
-## gauntlets part before you; when it runs dry he fades to an ember and the
-## blob lines must be stomped by hand until the fragment arcs above them
-## refill the mana. His glow is the pool readout.
+## SPELLBROS level (Neven's spec, round 3): the crimson spellbrother hovers
+## over the wizard's shoulder as a MANA-FUELED SHIELD. He never hunts —
+## stomps are the player's income and he must not touch them — but a blob
+## contact that WOULD KILL is burned out of existence for 1 mana. Broke
+## means unprotected: his glow is the pool readout, bright while a burn is
+## affordable, ember-faint when the next mistake is lethal.
 
 const HOVER := Vector2(14.0, -238.0)
-const BURN_MIN_X := 40.0    # never torches something already underfoot
-const BURN_MAX_X := 540.0   # roughly the lead the camera shows ahead
-const BURN_MAX_DY := 430.0
 const BURN_COST := 1
-const BURN_COOLDOWN := 0.3  # one blob per beat: a swarm drains the pool visibly
 
 var active := false
 var t := randf() * TAU
-var burn_cd := 0.0
 var beam_t := 0.0
 var beam_to := Vector2.ZERO
 
 
 func _process(delta: float) -> void:
 	t += delta
-	burn_cd -= delta
 	beam_t -= delta
 	visible = active
 	if not active:
@@ -32,29 +26,25 @@ func _process(delta: float) -> void:
 	var main = get_tree().get_first_node_in_group("main")
 	if main == null or main.player == null:
 		return
-	var p = main.player
-	global_position = p.global_position + HOVER + Vector2(0.0, sin(t * 2.4) * 10.0)
+	global_position = main.player.global_position + HOVER + Vector2(0.0, sin(t * 2.4) * 10.0)
 	queue_redraw()
-	if p.dead or main.game_over or burn_cd > 0.0 or main.coins < BURN_COST:
-		return
-	for n in get_tree().get_nodes_in_group("blobs"):
-		var b := n as SpikeBlob
-		if b == null or not is_instance_valid(b) or b.dying:
-			continue
-		var dx: float = b.global_position.x - p.global_position.x
-		if dx < BURN_MIN_X or dx > BURN_MAX_X:
-			continue
-		if absf(b.global_position.y - p.global_position.y) > BURN_MAX_DY:
-			continue
-		main.coins -= BURN_COST
-		main.hud.update_coins(main.coins)
-		main.audio.play("squish")
-		main.float_text(b.global_position, "-1", Color("ff5566"))
-		beam_to = b.global_position
-		beam_t = 0.16
-		b._pop()
-		burn_cd = BURN_COOLDOWN
-		break
+
+
+## Called by SpikeBlob on a would-be-lethal touch. True = the brother
+## burns the blob instead, spending BURN_COST from the shared pool.
+func try_guard(at: Vector2) -> bool:
+	if not active:
+		return false
+	var main = get_tree().get_first_node_in_group("main")
+	if main == null or main.coins < BURN_COST:
+		return false
+	main.coins -= BURN_COST
+	main.hud.update_coins(main.coins)
+	main.audio.play("squish")
+	main.float_text(at, "-1", Color("ff5566"))
+	beam_to = at
+	beam_t = 0.16
+	return true
 
 
 func _draw() -> void:
