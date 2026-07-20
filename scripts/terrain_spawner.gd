@@ -29,9 +29,13 @@ const PHASE_VOID := 1800.0  # the endgame after the SPELLBROS level
 
 const FLIP_CORRIDOR := 560.0  # floor-to-ceiling height in the FLIPSIDE level
 const FLIP_DEAD_CHANCE := 0.25  # dead zones: both surfaces gone, build to cross
-## FLIPSIDE wind-down: the band's last meters run on a continuous floor and
-## Main hands the tap back to jumping, so the boundary can't eat a flip.
-const FLIP_OUT_M := 45.0
+## Wind-down: a band's last meters return to calm, plain terrain before the
+## next level's twist (FLIPSIDE: continuous floor + taps become jumps again;
+## BRIDGES: blob-free easy gaps). RUNWAY_M: FLIPSIDE's opening stretch stays
+## a plain continuous floor so the level banner registers before the first
+## flip is ever asked for.
+const WIND_DOWN_M := 45.0
+const RUNWAY_M := 20.0
 
 ## Every level's first ~45 m (3-4 gaps) is a teach-in: the new mechanic in
 ## its gentlest form, no ambushes, before the band ramps to full intensity.
@@ -366,8 +370,28 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var teach := _is_teach(d)
 	# wind-down: hand the run back to plain floor before the next level
 	var out_left := Levels.start_m(Levels.UMBRA) - d
-	if out_left <= FLIP_OUT_M:
+	if out_left <= WIND_DOWN_M:
 		return _spawn_flip_outro(v)
+	# opening runway: one continuous plain floor — time to read the
+	# FLIPSIDE banner before the first flip (Neven landed out of BRIDGES
+	# straight into a flip prompt with no time to react)
+	if d - Levels.start_m(Levels.FLIPSIDE) < RUNWAY_M:
+		var run_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 800.0, 940.0)
+		var run_start := next_x - 0.3 * v
+		var run_w := (next_x - run_start) + rng.randf_range(1.0 * v, 1.4 * v)
+		_place_chunk(run_start, run_y, run_w)
+		flip_on_floor = true
+		flip_strip_start = run_start
+		last_top_y = run_y
+		var run_gap := run_start - next_x
+		next_x = run_start + run_w
+		return {
+			"gap": run_gap, "width": run_w, "top_y": run_y, "mega": false,
+			"enemies": 0, "entities": 0, "climb": 0,
+			"void": false, "pillar": false, "flip": true, "dead": false,
+			"runway": true, "overlap": -run_gap, "stars": 0, "rise": 0.0,
+			"speed": v,
+		}
 	# teach-in: wider flip windows, longer strips, no dead zones yet
 	var ov := (0.45 if teach else 0.30) * v
 	var floor_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
@@ -377,7 +401,7 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	# on ONE pad built near deck height, run off it again. Gaps are sized
 	# for a single pad and the far deck steps DOWN so the drift has room.
 	# None near the wind-down: no hole right where gravity gets handed back.
-	if not teach and flip_on_floor and out_left > FLIP_OUT_M + 20.0 \
+	if not teach and flip_on_floor and out_left > WIND_DOWN_M + 20.0 \
 			and rng.randf() < FLIP_DEAD_CHANCE:
 		var gap := rng.randf_range(0.45 * v, 0.7 * v)
 		var w := rng.randf_range(0.7 * v, 1.0 * v)
@@ -422,7 +446,7 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	}
 
 
-## The corridor's wind-down (last FLIP_OUT_M meters of FLIPSIDE): one
+## The corridor's wind-down (last WIND_DOWN_M meters of FLIPSIDE): one
 ## continuous floor — no ceilings, no dead zones, no gaps — while Main
 ## rights gravity and taps become jumps again, so the level boundary can
 ## never eat a habitual flip into a hole (how Neven died). The first outro
@@ -462,6 +486,27 @@ func _spawn_flip_outro(v: float) -> Dictionary:
 ## ~1.1*v — enough to carry from a late blob across the deck onto the next
 ## gap's blob without ever touching down.
 func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
+	# wind-down: the last stretch before FLIPSIDE goes blob-free with plain
+	# jumps and wide decks — the corridor is entered calm, not mid-panic
+	if Levels.start_m(Levels.FLIPSIDE) - d <= WIND_DOWN_M:
+		var out_gap := rng.randf_range(0.38, 0.48) * v
+		var out_w := rng.randf_range(500.0, 700.0)
+		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
+		var out_x := next_x + out_gap
+		_place_chunk(out_x, out_y, out_w)
+		var out_used := 0
+		if rng.randf() < 0.4:
+			_place_coin(Vector2(out_x + rng.randf_range(80.0, out_w - 80.0), out_y - 60.0))
+			out_used = 1
+		var out_rise := maxf(0.0, last_top_y - out_y)
+		next_x = out_x + out_w
+		last_top_y = out_y
+		return {
+			"gap": out_gap, "width": out_w, "top_y": out_y, "mega": false,
+			"enemies": 0, "entities": out_used, "climb": 0,
+			"void": false, "pillar": false, "bridge": true, "bkind": "out",
+			"stars": 0, "rise": out_rise, "speed": v,
+		}
 	# teach-in: single blobs, the narrowest gaps, wide pillars
 	var teach := _is_teach(d)
 	var top_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)

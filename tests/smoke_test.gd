@@ -366,6 +366,17 @@ func _run_tests() -> void:
 	p.jump_buffer = 0.0
 	p.velocity = Vector2.ZERO
 
+	# opening runway: taps still JUMP right after the boundary — the first
+	# flip is only asked for once the runway ends
+	main.distance_m = Levels.start_m(Levels.FLIPSIDE) + 10.0
+	p.jump_buffer = 0.0
+	p.flip_buffer = 0.0
+	main._jump_pressed()
+	var runway_jumps: bool = p.jump_buffer > 0.0 and p.flip_buffer <= 0.0
+	print("TEST fliprunway: tap_jumps=%s (expect true)" % runway_jumps)
+	_check(runway_jumps, "flipside runway taps jump")
+	p.jump_buffer = 0.0
+
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
 	main.distance_m = 1300.0
 	main.psy._process(0.016)
@@ -514,6 +525,10 @@ func _run_tests() -> void:
 	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 40 and bridgeb["climbs"] == 0,
 			"blob bridges band")
 	_check(bridgeb["bplain"] > 0 and bridgeb["bmega"] > 0, "bridges variety")
+	# bridges wind-down: the corridor is entered calm — no blobs at the end
+	var bridge_out := _probe(Levels.start_m(Levels.FLIPSIDE) - 20.0, 80)
+	_check(bridge_out["bridge"] == 80 and bridge_out["enemies"] == 0,
+			"bridges wind-down calm")
 	# FLIPSIDE band: all corridor chunks, no enemies, chains + some dead zones
 	var flipb := _probe(Levels.start_m(Levels.FLIPSIDE) + 50.0, 80)
 	_check(flipb["flip"] == 80 and flipb["enemies"] == 0, "flipside corridor band")
@@ -531,7 +546,12 @@ func _run_tests() -> void:
 	var teach_bridge := _probe(Levels.start_m(Levels.BRIDGES) + 10.0, 80)
 	_check(teach_bridge["bridge"] == 80 and teach_bridge["enemies"] == 80,
 			"bridges teach-in: single blobs only")
-	var teach_flip := _probe(Levels.start_m(Levels.FLIPSIDE) + 10.0, 80)
+	# FLIPSIDE opening runway (first ~20 m): continuous plain floor
+	var runway := _probe(Levels.start_m(Levels.FLIPSIDE) + 10.0, 80)
+	_check(runway["flip"] == 80 and runway["dead"] == 0 and runway["min_top"] >= 800.0,
+			"flipside opening runway")
+	# then the teach-in proper: chain strips, no dead zones yet
+	var teach_flip := _probe(Levels.start_m(Levels.FLIPSIDE) + 30.0, 80)
 	_check(teach_flip["flip"] == 80 and teach_flip["dead"] == 0,
 			"flipside teach-in: chains, no dead zones")
 	# FLIPSIDE wind-down: continuous floor near the deck, no dead zones
@@ -607,8 +627,8 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["builds"] += ceilf(s["gap"] / one_build)
 		elif s.get("bridge", false):
 			var bk: String = s.get("bkind", "blob")
-			if bk == "plain":
-				# blob-free breather: a plain jump must clear it (flat decks)
+			if bk == "plain" or bk == "out":
+				# blob-free breather / wind-down: a plain jump must clear it
 				if s["gap"] > 0.68 * v:
 					stats["bad"] += 1
 			else:

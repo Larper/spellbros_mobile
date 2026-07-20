@@ -257,14 +257,14 @@ func _handle_tap(screen_pos: Vector2) -> void:
 		_try_build(world_pos)
 
 
-## True while the tap action is the gravity flip: inside FLIPSIDE minus its
-## wind-down stretch, where the spawner returns to a continuous floor and
-## control is handed back BEFORE the boundary — so crossing into the next
-## level never eats a habitual flip into a hole (how Neven died: flipped up
-## right where the ceilings had already ended).
+## True while the tap action is the gravity flip: inside FLIPSIDE minus the
+## opening runway (a plain floor while the banner registers — taps still
+## jump) and minus the wind-down stretch at the far end (continuous floor,
+## control handed back BEFORE the boundary, so crossing into the next level
+## never eats a habitual flip into a hole).
 func in_flip_zone() -> bool:
-	return Levels.level_for(distance_m) == Levels.FLIPSIDE \
-			and distance_m < Levels.start_m(Levels.UMBRA) - TerrainSpawner.FLIP_OUT_M
+	return distance_m >= Levels.start_m(Levels.FLIPSIDE) + TerrainSpawner.RUNWAY_M \
+			and distance_m < Levels.start_m(Levels.UMBRA) - TerrainSpawner.WIND_DOWN_M
 
 
 ## The jump tap doubles as the gravity flip inside FLIPSIDE.
