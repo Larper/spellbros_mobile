@@ -517,6 +517,16 @@ func _run_tests() -> void:
 	main.distance_m = 20.0
 	main.bro.active = false
 
+	# SHIFT+U dev cheat: every level unlocks as a starting point
+	var evu := InputEventKey.new()
+	evu.keycode = KEY_U
+	evu.shift_pressed = true
+	evu.pressed = true
+	main.hud._unhandled_input(evu)
+	print("TEST unlockcheat: unlocked=%d (expect %d)" % [
+		Levels.load_unlocked(), Levels.count() - 1])
+	_check(Levels.load_unlocked() == Levels.count() - 1, "shift+U unlocks all")
+
 	# speed: flat before PHASE_SPEED, then ramps at SPEED_RAMP, capped
 	var s0: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED - 10.0)
 	var s1: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED + 100.0)

@@ -118,6 +118,15 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
+	if key and key.pressed and not key.echo \
+			and key.keycode == KEY_U and key.shift_pressed:
+		# SHIFT+U (dev cheat): every level unlocks as a starting point
+		Levels.unlock(Levels.count() - 1)
+		show_level_banner("ALL LEVELS UNLOCKED")
+		if menu_root.visible:
+			show_menu(Levels.load_unlocked())
+		get_viewport().set_input_as_handled()
+		return
 	if key and key.pressed and not key.echo and menu_root.visible \
 			and (key.keycode == KEY_UP or key.keycode == KEY_DOWN):
 		# dev aid: arrows on the menu set a late-spawn offset — the chosen
