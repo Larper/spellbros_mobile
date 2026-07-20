@@ -259,7 +259,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch and event.pressed:
 		_handle_tap(event.position)
 	elif event is InputEventKey and event.pressed and not event.echo:
-		# PC convenience: Space jumps, R restarts
+		# PC convenience: Space jumps, R restarts; S/D are dev grants so
+		# the powerup visuals are testable without hunting for pickups
 		if event.keycode == KEY_SPACE:
 			if game_over:
 				_maybe_restart()
@@ -267,6 +268,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				_jump_pressed()
 		elif event.keycode == KEY_R and game_over:
 			_maybe_restart()
+		elif event.keycode == KEY_S and not game_over:
+			player.shielded = true
+			float_text(player.global_position + Vector2(0, -50), "SHIELD!", Color("b98cff"))
+		elif event.keycode == KEY_D and not game_over:
+			player.double_jumps = 1
+			float_text(player.global_position + Vector2(0, -50), "DOUBLE JUMP!", Color("ffd75e"))
 
 
 func _handle_tap(screen_pos: Vector2) -> void:

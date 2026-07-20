@@ -544,6 +544,22 @@ func _run_tests() -> void:
 	main.distance_m = 20.0
 	main.bro.active = false
 
+	# S / D dev keys grant the shield and the double jump on demand
+	p.shielded = false
+	p.double_jumps = 0
+	var evs := InputEventKey.new()
+	evs.keycode = KEY_S
+	evs.pressed = true
+	main._unhandled_input(evs)
+	var evd := InputEventKey.new()
+	evd.keycode = KEY_D
+	evd.pressed = true
+	main._unhandled_input(evd)
+	print("TEST devgrants: shield=%s jumps=%d (expect true 1)" % [p.shielded, p.double_jumps])
+	_check(p.shielded and p.double_jumps == 1, "S/D dev powerup grants")
+	p.shielded = false
+	p.double_jumps = 0
+
 	# SHIFT+U dev cheat: every level unlocks as a starting point
 	var evu := InputEventKey.new()
 	evu.keycode = KEY_U
