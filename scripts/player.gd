@@ -165,11 +165,16 @@ func _draw() -> void:
 		var step := sin(time_alive * 20.0)
 		draw_rect(Rect2(-16 + step * 5.0, 38, 12, 6), Color("2f2650"))
 		draw_rect(Rect2(6 - step * 5.0, 38, 12, 6), Color("2f2650"))
-	# shield bubble: a violet ring while the one-hit protection is held
+	# shield bubble: a light-violet barrier while the one-hit protection is
+	# held. The old thin ring vanished against the pulsing background at run
+	# speed (Neven) — this one is a filled dome with a fat breathing rim.
 	if shielded:
-		draw_circle(Vector2(0, -8), 54.0, Color(0.6, 0.4, 1.0, 0.12))
-		draw_arc(Vector2(0, -8), 54.0, 0.0, TAU, 40,
-				Color(0.73, 0.55, 1.0, 0.6 + 0.2 * sin(time_alive * 6.0)), 4.0)
+		var sp_pulse := 0.5 + 0.5 * sin(time_alive * 6.0)
+		draw_circle(Vector2(0, -8), 62.0, Color(0.65, 0.48, 1.0, 0.22 + 0.08 * sp_pulse))
+		draw_arc(Vector2(0, -8), 62.0, 0.0, TAU, 48,
+				Color(0.8, 0.62, 1.0, 0.85 + 0.15 * sp_pulse), 7.0)
+		draw_arc(Vector2(0, -8), 51.0, 0.0, TAU, 48,
+				Color(0.92, 0.84, 1.0, 0.3 + 0.3 * sp_pulse), 3.0)
 	# Star of Levity charge: gold sparkles orbit while a double jump is stored
 	if double_jumps > 0:
 		for i in range(3):
