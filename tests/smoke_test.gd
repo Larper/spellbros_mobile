@@ -309,6 +309,19 @@ func _run_tests() -> void:
 	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.double_jumps == 0,
 			"star of levity")
 
+	# a tap buffered BEFORE the pickup must not instantly eat the charge —
+	# the reason held orbs were never seen (star sits at jump-apex height,
+	# so pickup is always mid-air, where a stale buffer spends same-frame)
+	var star2 := StarPickup.new()
+	star2.global_position = p.global_position
+	main.add_child(star2)
+	p.jump_buffer = 0.1  # tapped moments before touching the star
+	star2._on_body_entered(p)
+	print("TEST starbuffer: jumps=%d buffer=%.2f (expect 1, <= 0)" % [
+		p.double_jumps, p.jump_buffer])
+	_check(p.double_jumps == 1 and p.jump_buffer <= 0.0, "star survives a stale tap")
+	p.double_jumps = 0
+
 	# orange fragment: a single crystal worth +3 mana
 	main.coins = 0
 	var oc := ManaCrystal.new()

@@ -37,6 +37,11 @@ func _on_body_entered(body: Node2D) -> void:
 	collected = true
 	set_deferred("monitoring", false)
 	p.double_jumps = 1
+	# the star hangs at jump-apex height, so it is ALWAYS taken mid-air: a
+	# tap still buffered from the way up would spend the fresh charge on
+	# this very physics frame — the player never even sees the held orbs.
+	# Spending the star must take a NEW tap.
+	p.jump_buffer = 0.0
 	var main = get_tree().get_first_node_in_group("main")
 	if main:
 		main.audio.play("pickup")
