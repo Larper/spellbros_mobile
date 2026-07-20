@@ -31,15 +31,20 @@ func _process(delta: float) -> void:
 	var beat := 60.0 / GameAudio.BPM
 	var pulse := exp(-5.0 * fmod(t, beat) / beat)
 	var hue := fmod(t * 0.02, 1.0)
-	if Levels.level_for(main.distance_m) == Levels.UMBRA:
-		# lights out: a near-black modulate that still thumps with the kick
-		var v := 0.10 + 0.05 * pulse
-		color = Color(v, v, v * 1.25)
-		RenderingServer.set_default_clear_color(Color(0.01, 0.008, 0.02))
-		return
-	color = Color.from_hsv(hue, 0.32 - 0.22 * pulse, 1.0)
+	# UMBRA never hard-cuts (Neven): the psychedelia drains to black across
+	# the FLIPSIDE wind-down — starting right as the UMBRA banner fires —
+	# and blooms back out over SPELLBROS' first meters.
+	var d: float = main.distance_m
+	var dark := clampf((d - (Levels.start_m(Levels.UMBRA) - 60.0)) / 55.0, 0.0, 1.0) \
+			- clampf((d - Levels.start_m(Levels.BROS)) / 30.0, 0.0, 1.0)
+	dark = clampf(dark, 0.0, 1.0)
+	# lights-out target still thumps faintly with the kick
+	var v := 0.10 + 0.05 * pulse
+	var lite := Color.from_hsv(hue, 0.32 - 0.22 * pulse, 1.0)
+	var lite_bg := Color.from_hsv(fmod(hue + 0.5, 1.0), 0.6, 0.10 + 0.10 * pulse)
+	color = lite.lerp(Color(v, v, v * 1.25), dark)
 	RenderingServer.set_default_clear_color(
-			Color.from_hsv(fmod(hue + 0.5, 1.0), 0.6, 0.10 + 0.10 * pulse))
+			lite_bg.lerp(Color(0.01, 0.008, 0.02), dark))
 
 
 ## Warm point light used by the wizard, crystals and lantern-platforms in

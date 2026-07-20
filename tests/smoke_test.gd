@@ -360,9 +360,26 @@ func _run_tests() -> void:
 	main._jump_pressed()
 	var outro_jumps: bool = p.jump_buffer > 0.0
 	await create_timer(0.05).timeout
-	print("TEST flipoutro: tap_jumps=%s (expect true) gravity=%.0f (expect 1)" % [
-		outro_jumps, p.gravity_dir])
+	# the UMBRA banner must already have fired here, 20 m BEFORE the band
+	var early_banner: bool = main.hud.banner_label.text == "LEVEL 5: UMBRA"
+	print("TEST flipoutro: tap_jumps=%s (expect true) gravity=%.0f (expect 1) banner=\"%s\" (expect LEVEL 5: UMBRA)" % [
+		outro_jumps, p.gravity_dir, main.hud.banner_label.text])
 	_check(outro_jumps and p.gravity_dir > 0.0, "flipside wind-down hand-back")
+	_check(early_banner, "UMBRA announced during the wind-down")
+	# and the darkness is mid-gradient, not a hard cut: dimmer than the
+	# psychedelic bands, brighter than UMBRA's floor
+	main.psy._process(0.016)
+	var mid_dark: float = main.psy.color.v
+	main.distance_m = 20.0
+	main.psy._process(0.016)
+	var lite_v: float = main.psy.color.v
+	main.distance_m = Levels.start_m(Levels.UMBRA) + 100.0
+	main.psy._process(0.016)
+	var full_dark: float = main.psy.color.v
+	main.distance_m = Levels.start_m(Levels.UMBRA) - 20.0
+	print("TEST umbrafade: lite=%.2f mid=%.2f dark=%.2f (expect strictly dimming)" % [
+		lite_v, mid_dark, full_dark])
+	_check(full_dark < mid_dark and mid_dark < lite_v, "umbra gradient in")
 	p.jump_buffer = 0.0
 	p.velocity = Vector2.ZERO
 

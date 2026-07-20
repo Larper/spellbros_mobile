@@ -56,6 +56,7 @@ var coins := START_COINS
 var start_level := 0
 var start_offset_m := 0.0  # meters credited for starting at a later level
 var cur_level := 0
+var announced_level := 0  # banners run ahead of cur_level (wind-down preview)
 var distance_m := 0.0
 var game_over := false
 var game_over_at := 0.0
@@ -119,6 +120,7 @@ func _ready() -> void:
 func begin_run(i: int) -> void:
 	start_level = i
 	cur_level = i
+	announced_level = i
 	start_offset_m = Levels.start_m(i)
 	distance_m = start_offset_m
 	# later starts get a small stake so the level twist is playable on arrival
@@ -151,7 +153,13 @@ func _physics_process(delta: float) -> void:
 		if lv > cur_level:
 			cur_level = lv
 			Levels.unlock(lv)
-			hud.show_level_banner("LEVEL %d: %s" % [lv + 1, Levels.level_name(lv)])
+		# the banner runs AHEAD of the boundary: it fires as the previous
+		# band's wind-down begins (Neven: announcing UMBRA at 1200 m, when
+		# UMBRA starts, is too late to prepare)
+		var ann := Levels.level_for(distance_m + TerrainSpawner.WIND_DOWN_M)
+		if ann > announced_level:
+			announced_level = ann
+			hud.show_level_banner("LEVEL %d: %s" % [ann + 1, Levels.level_name(ann)])
 			audio.play("pickup")
 		# per-level state: darkness light, the echo brother, gravity hygiene
 		wizard_light.enabled = lv == Levels.UMBRA
