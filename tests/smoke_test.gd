@@ -251,6 +251,27 @@ func _run_tests() -> void:
 	blob3.queue_free()
 	p.velocity = Vector2.ZERO
 
+	# the shield orb never precedes the first blob: the counter must come
+	# after the threat it answers
+	main.spawner.enemy_seen = false
+	main.spawner.climb_dir = 0
+	main.spawner.climb_steps_left = 0
+	main.spawner.flat_chunks_since_wave = 99
+	main.spawner.force_mega = false
+	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
+	var first_enemy := -1
+	var first_shield := -1
+	for i in range(300):
+		main.spawner.next_x = 80.0 * 100.0 + main.start_x
+		var sc: Dictionary = main.spawner._spawn_chunk()
+		if first_enemy == -1 and sc["enemies"] > 0:
+			first_enemy = i
+		if first_shield == -1 and sc["shields"] > 0:
+			first_shield = i
+	print("TEST shieldorder: first_enemy=%d first_shield=%d (expect both >= 0, enemy strictly first)" % [
+		first_enemy, first_shield])
+	_check(first_enemy >= 0 and first_shield > first_enemy, "shield only after first enemy")
+
 	# park the wizard on a fresh platform so the star test starts grounded
 	main.coins = 5
 	main.build_cooldown = 0.0
@@ -636,6 +657,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
+	main.spawner.enemy_seen = true  # probes sample mid-run behavior
 	main.spawner.flip_on_floor = true
 	main.spawner.flip_strip_start = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,

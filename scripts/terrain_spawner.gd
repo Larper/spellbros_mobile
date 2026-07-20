@@ -107,6 +107,11 @@ var flip_strip_start := 0.0  # left edge of the last chain strip placed
 # when it reaches 0 the next chunk is a void crossing
 var spring_deck_left := 3
 
+# FOUNDATIONS: true once the first blob has been placed this run — the
+# shield orb only spawns behind it (the counter must never precede the
+# threat it answers; the orb means nothing before a blob has been met)
+var enemy_seen := false
+
 
 func _ready() -> void:
 	rng.randomize()
@@ -207,6 +212,7 @@ func _spawn_chunk() -> Dictionary:
 
 	# enemies (never on climb stairs — those are about building — and never
 	# in a teach-in stretch)
+	var enemy_before := enemy_seen  # the shield gate reads the PRE-chunk state
 	var enemies := 0
 	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not teach:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
@@ -233,6 +239,8 @@ func _spawn_chunk() -> Dictionary:
 		b.speed = espeed
 		add_child(b)
 	used += enemies
+	if enemies > 0:
+		enemy_seen = true
 
 	# at most one crystal on the chunk itself; climb steps pay out more
 	# reliably so stairs stay affordable
@@ -254,8 +262,9 @@ func _spawn_chunk() -> Dictionary:
 
 	# purple shield orb: FOUNDATIONS only — one forgiven blob mistake in the
 	# band that teaches blobs. Mid-deck like the star, same entity budget.
+	# Gated on a blob already standing EARLIER in the run, never before.
 	var shields := 0
-	if lv == 0 and d >= PHASE_ENEMY and used < budget and stars == 0 \
+	if lv == 0 and enemy_before and used < budget and stars == 0 \
 			and rng.randf() < 0.07:
 		_place_shield(Vector2(x + rng.randf_range(w * 0.3, w * 0.7), top_y - 150.0))
 		used += 1
