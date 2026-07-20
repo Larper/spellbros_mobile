@@ -7,6 +7,13 @@ extends Area2D
 ## late-game run speeds (Neven's call) — and they're plain circles now,
 ## no spiky heads.
 
+## Aim-assist window: natural contact width is ~60 px (28 half-body +
+## 32 radius); anything inside ASSIST_HALF_W while falling past the crown
+## band still counts as a stomp.
+const ASSIST_HALF_W := 95.0
+const ASSIST_TOP := 44.0
+const ASSIST_BOT := 8.0
+
 var speed := 130.0  # kept for spawner compatibility; static blobs ignore it
 var left_x := 0.0
 var right_x := 0.0
@@ -33,6 +40,27 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	t += delta
 	queue_redraw()
+	if not dying:
+		_stomp_assist()
+
+
+## Aim assist (Neven): the miss that hurt in BLOB BRIDGES was sailing just
+## past a blob's edge and falling into the gap below. While the wizard is
+## FALLING and his feet sweep the band around the blob's crown, a slight
+## horizontal miss still registers as a stomp. Rising and side touches
+## stay lethal — the forgiveness is in the aim, not the timing.
+func _stomp_assist() -> void:
+	var m = get_tree().get_first_node_in_group("main")
+	if m == null:
+		return
+	var p: Player = m.player
+	if p == null or p.dead or p.velocity.y < 120.0:
+		return
+	if absf(p.global_position.x - global_position.x) > ASSIST_HALF_W:
+		return
+	var feet: float = p.global_position.y + Player.BODY_H * 0.5
+	if feet > global_position.y - ASSIST_TOP and feet < global_position.y + ASSIST_BOT:
+		_squash(p)
 
 
 func _on_body_entered(body: Node2D) -> void:
@@ -41,10 +69,12 @@ func _on_body_entered(body: Node2D) -> void:
 	var p := body as Player
 	if p == null or p.dead:
 		return
-	# Forgiving stomp: any contact from above counts unless the wizard is
-	# clearly rising into it from below — apex touches and glancing falls
-	# all squish (Neven: strict falling-only stomps were frustrating).
-	var stomped: bool = p.velocity.y > -200.0 and p.global_position.y < global_position.y - 4.0
+	# Direct contact: a stomp only while FALLING with the feet above the
+	# blob's midline — side and rising touches kill. Near-miss forgiveness
+	# lives in _stomp_assist(), not here (the old any-contact-from-above
+	# rule made blobs feel like trampolines).
+	var feet: float = p.global_position.y + Player.BODY_H * 0.5
+	var stomped: bool = p.velocity.y > 0.0 and feet < global_position.y + 10.0
 	if stomped:
 		_squash(p)
 	else:

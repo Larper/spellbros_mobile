@@ -187,6 +187,20 @@ func _run_tests() -> void:
 	main.game_over = false
 	main.hud.over_root.visible = false
 
+	# aim assist: a slight horizontal miss, falling past the blob's crown,
+	# still registers as a stomp (the forgiveness Neven asked for)
+	var blob3 := SpikeBlob.new(0.0, 100.0)
+	blob3.global_position = p.global_position + Vector2(80.0, 50.0)
+	main.add_child(blob3)
+	main.coins = 3
+	p.velocity.y = 400.0
+	blob3._stomp_assist()
+	print("TEST stompassist: dying=%s coins=%d (expect true 4) alive=%s" % [
+		blob3.dying, main.coins, not p.dead])
+	_check(blob3.dying and main.coins == 4 and not p.dead, "stomp aim assist")
+	blob3.queue_free()
+	p.velocity = Vector2.ZERO
+
 	# park the wizard on a fresh platform so the star test starts grounded
 	main.coins = 5
 	main.build_cooldown = 0.0
