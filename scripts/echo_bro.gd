@@ -3,18 +3,25 @@ extends Node2D
 
 ## SPELLBROS level: the brother wizard — a cyan spirit echo mirroring the
 ## player's arc through the camera's center line (you jump down, he jumps
-## up). He phases through terrain and enemies and cannot die, but every
-## crystal he touches is banked mana you didn't have to detour for:
-## steering two arcs with one thumb is the level's skill.
+## up). Two jobs make him consequential, not decoration:
+##  - every crystal he touches is banked mana you didn't detour for:
+##    steering two arcs with one thumb is the level's skill
+##  - he GUARDS: a blob touch that would kill you is intercepted — the
+##    brother takes the hit and needs GUARD_COOLDOWN seconds to re-form
+##    (ghost-faint meanwhile), so the band is survivable exactly once
+##    per recharge. Watch his glow to know if the bond is ready.
 
 const COLLECT_RADIUS := 70.0
+const GUARD_COOLDOWN := 10.0
 
 var active := false
+var guard_cd := 0.0
 var t := 0.0
 
 
 func _process(delta: float) -> void:
 	t += delta
+	guard_cd = maxf(0.0, guard_cd - delta)
 	visible = active
 	if not active:
 		return
@@ -34,12 +41,28 @@ func _process(delta: float) -> void:
 				main.float_text(c.global_position, "+1", Color("7ef2e0"))
 
 
+## Called by SpikeBlob on a would-be-lethal touch. True = the brother
+## takes the hit instead of the wizard.
+func try_guard(at: Vector2) -> bool:
+	if not active or guard_cd > 0.0:
+		return false
+	guard_cd = GUARD_COOLDOWN
+	var main = get_tree().get_first_node_in_group("main")
+	if main:
+		main.audio.play("squish")
+		main.float_text(at, "BRO!", Color("7ef2e0"))
+	return true
+
+
 func _draw() -> void:
 	if not active:
 		return
-	# translucent cyan echo of the wizard, drawn upside down (he's a mirror)
+	# translucent cyan echo of the wizard, drawn upside down (he's a
+	# mirror); barely-there while the guard bond recharges
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, -1.0))
 	var a := 0.5 + 0.15 * sin(t * 5.0)
+	if guard_cd > 0.0:
+		a *= 0.25
 	var robe := PackedVector2Array([
 		Vector2(-26, 40), Vector2(26, 40), Vector2(14, -6), Vector2(-14, -6),
 	])

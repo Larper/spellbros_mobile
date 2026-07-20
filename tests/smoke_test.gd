@@ -165,7 +165,7 @@ func _run_tests() -> void:
 	main.add_child(blob)
 	p.velocity.y = 300.0  # falling onto it
 	blob._on_body_entered(p)
-	print("TEST stomp: coins=%d (expect 3) blob_dying=%s vel_y=%.0f (expect -880) player_alive=%s" % [
+	print("TEST stomp: coins=%d (expect 3) blob_dying=%s vel_y=%.0f (expect -1000) player_alive=%s" % [
 		main.coins, blob.dying, p.velocity.y, not p.dead])
 	_check(main.coins == 3 and blob.dying and not p.dead, "stomp bounty")
 	blob.queue_free()
@@ -433,6 +433,29 @@ func _run_tests() -> void:
 	print("TEST echobro: active=%s coins %d -> %d (expect +1, bro collected)" % [
 		bro_on, coins_pre, main.coins])
 	_check(bro_on and main.coins == coins_pre + 1, "echo bro")
+
+	# the bond, consequential: the bro intercepts one kill, then recharges
+	var gblob := SpikeBlob.new(0.0, 100.0)
+	gblob.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(gblob)
+	p.velocity.y = 0.0
+	gblob._on_body_entered(p)
+	var guarded: bool = not p.dead and gblob.dying and main.bro.guard_cd > 0.0
+	var gblob2 := SpikeBlob.new(0.0, 100.0)
+	gblob2.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(gblob2)
+	gblob2._on_body_entered(p)
+	print("TEST broguard: guarded=%s (expect true) recharging_lethal=%s (expect true)" % [
+		guarded, p.dead])
+	_check(guarded and p.dead, "echo bro guardian")
+	gblob.queue_free()
+	gblob2.queue_free()
+	p.dead = false
+	p.collision_mask = 1
+	p.rotation = 0.0
+	p.velocity = Vector2.ZERO
+	main.game_over = false
+	main.hud.over_root.visible = false
 	main.distance_m = 20.0
 	main.bro.active = false
 

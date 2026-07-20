@@ -85,6 +85,10 @@ func _on_body_entered(body: Node2D) -> void:
 ## bubble pops, the blob pops with it (no bounce, no bounty), the run lives.
 func _lethal(p: Player) -> void:
 	var main = get_tree().get_first_node_in_group("main")
+	# SPELLBROS: the echo brother intercepts one hit per recharge
+	if main and main.bro and main.bro.try_guard(global_position):
+		_pop()
+		return
 	if p.shielded:
 		p.break_shield()
 		if main:
