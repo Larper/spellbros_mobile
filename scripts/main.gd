@@ -209,22 +209,30 @@ func _physics_process(delta: float) -> void:
 
 
 func camera_target_y() -> float:
+	# FLIPSIDE frames the whole corridor: the wizard's surface sits ~40 px
+	# inside it, so offsetting 240 px toward its middle — from either
+	# gravity — keeps BOTH floor and ceiling on screen. A coming gap in the
+	# ceiling must never be invisible overhead (Neven).
+	if in_flip_zone():
+		return clampf(player.global_position.y - 240.0 * player.gravity_dir, 150.0, 1000.0)
 	# Frame the player with a slightly lower baseline than before, and ease
 	# further down when the terrain ahead sits lower, so the next pillar is
 	# already on screen while descending. Chunk tops are static world data,
 	# so this never pulses with the jump arc.
 	var target := player.global_position.y - 60.0
 	# A hard fall drags the frame down ahead of the wizard: what's below
-	# matters more than the sky above (Neven: pillar tops arrived unseen).
-	# Threshold 1150 sits just under a flat jump's landing speed (1170),
-	# so ordinary hops never cross it and nothing pulses.
-	target += minf(maxf(0.0, player.velocity.y - 1150.0) * 0.5, 380.0)
+	# matters more than the sky above (Neven twice: pillar tops arrived
+	# unseen). Kicks in just before a flat jump's landing speed (1170), so
+	# plain hops get at most a whisper of it right at touchdown; real drops
+	# pull the frame down hard and the bottom clamp gives them 1000 px of
+	# room (view bottom 1432 — still below the deepest ground at 970).
+	target += minf(maxf(0.0, player.velocity.y - 1000.0) * 0.7, 480.0)
 	var ahead := _lowest_ground_ahead()
 	if ahead > 0.0:
 		# 360/240 keep the same screen fractions the pre-zoom 450/300 gave the
 		# full-height view (visible half-height is now 432, not 540)
 		target = maxf(target, minf(ahead - 360.0, player.global_position.y + 240.0))
-	return clampf(target, 150.0, 920.0)
+	return clampf(target, 150.0, 1000.0)
 
 
 func _lowest_ground_ahead() -> float:

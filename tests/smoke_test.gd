@@ -156,8 +156,24 @@ func _run_tests() -> void:
 	var t_fall: float = main.camera_target_y()
 	p.velocity.y = 0.0
 	p.global_position.y = y_saved
-	print("TEST camfall: still %.0f falling %.0f (expect >= 300 px lower)" % [t_still, t_fall])
-	_check(t_fall - t_still >= 300.0, "camera fall lookdown")
+	print("TEST camfall: still %.0f falling %.0f (expect >= 400 px lower)" % [t_still, t_fall])
+	_check(t_fall - t_still >= 400.0, "camera fall lookdown")
+
+	# FLIPSIDE frames the corridor: floor-running looks up at the ceiling,
+	# ceiling-running looks down at the floor — the opposite surface (and
+	# any gap coming in it) must stay on screen
+	main.distance_m = 950.0
+	var y_keep: float = p.global_position.y
+	p.global_position.y = 880.0
+	p.gravity_dir = 1.0
+	var t_floor: float = main.camera_target_y()
+	p.gravity_dir = -1.0
+	var t_ceil: float = main.camera_target_y()
+	p.gravity_dir = 1.0
+	p.global_position.y = y_keep
+	main.distance_m = 20.0
+	print("TEST camflip: floor %.0f (expect 640) ceiling %.0f (expect 1000)" % [t_floor, t_ceil])
+	_check(t_floor == 640.0 and t_ceil == 1000.0, "flipside corridor framing")
 
 	# no-mana path must refuse to build
 	main.coins = 0
