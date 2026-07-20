@@ -508,10 +508,12 @@ func _run_tests() -> void:
 	_check(springb["mana"] >= springb["builds"] * 0.8, "springs pad economy")
 	# the rhythm: easy deck sections split by void crossings (~1 in 3-5)
 	_check(springb["svoid"] > 8 and springb["svoid"] < 40, "springs deck/void rhythm")
-	# BLOB BRIDGES band: every chunk a bridge, blobs as stepping stones
+	# BLOB BRIDGES band: bridges throughout, blobs as stepping stones, plus
+	# blob-free variety (plain breathers and build-demanding megas)
 	var bridgeb := _probe(Levels.start_m(Levels.BRIDGES) + 50.0, 80)
-	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 80 and bridgeb["climbs"] == 0,
+	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 40 and bridgeb["climbs"] == 0,
 			"blob bridges band")
+	_check(bridgeb["bplain"] > 0 and bridgeb["bmega"] > 0, "bridges variety")
 	# FLIPSIDE band: all corridor chunks, no enemies, chains + some dead zones
 	var flipb := _probe(Levels.start_m(Levels.FLIPSIDE) + 50.0, 80)
 	_check(flipb["flip"] == 80 and flipb["enemies"] == 0, "flipside corridor band")
@@ -556,7 +558,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.flip_strip_start = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"dead": 0, "spring": 0, "svoid": 0, "min_top": 9999.0, "bad": 0,
+			"dead": 0, "spring": 0, "svoid": 0, "bplain": 0, "bmega": 0,
+			"min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -589,6 +592,10 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["spring"] += 1
 		if s.get("svoid", false):
 			stats["svoid"] += 1
+		if s.get("bkind", "") == "plain":
+			stats["bplain"] += 1
+		if s.get("bkind", "") == "bmega":
+			stats["bmega"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
@@ -599,10 +606,17 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["void"]:
 			stats["builds"] += ceilf(s["gap"] / one_build)
 		elif s.get("bridge", false):
-			# stomp-chain is the intended crossing; one build is the fallback
-			stats["builds"] += 1.0
-			if s["gap"] > one_build:
-				stats["bad"] += 1
+			var bk: String = s.get("bkind", "blob")
+			if bk == "plain":
+				# blob-free breather: a plain jump must clear it (flat decks)
+				if s["gap"] > 0.68 * v:
+					stats["bad"] += 1
+			else:
+				# blob gaps: stomp-chain intended, one build the fallback;
+				# bmega: the build IS the crossing
+				stats["builds"] += 1.0
+				if s["gap"] > one_build:
+					stats["bad"] += 1
 		elif s.get("dead", false):
 			# dead zone: no jump exists in FLIPSIDE, so the crossing is
 			# run-off fall + one pad + run-off fall onto the LOWER far deck

@@ -14,7 +14,9 @@ const GRAVITY := 3300.0
 const JUMP_VELOCITY := -1170.0
 const COYOTE_TIME := 0.12
 const JUMP_BUFFER := 0.12
-const STOMP_BOUNCE := -880.0
+## Strong enough that bounce + a tap at its apex reaches ~1.1*v — the
+## BLOB BRIDGES chain (stomp, tap, stomp across a deck) depends on it.
+const STOMP_BOUNCE := -1000.0
 const SPRING_LAUNCH := -1500.0  # ~1.6x jump height
 
 var run_speed := 470.0

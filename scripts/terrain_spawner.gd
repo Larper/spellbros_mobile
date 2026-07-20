@@ -451,34 +451,70 @@ func _spawn_flip_outro(v: float) -> Dictionary:
 	}
 
 
-## BLOB BRIDGES level: sparse pillars split by gaps wider than any jump,
-## with drifting sky blobs hovering over each gap. Chain stomps to cross
-## (each stomp refreshes the air jump and pays the +1 bounty) — or spend
-## 1 mana to bridge the old-fashioned way.
+## BLOB BRIDGES level, round 2 (Neven: too monotone, and give me CHAINS).
+## Three gap kinds now share the band:
+##   blob  (~62%) — 1 blob mid-gap, or 2 in a wider gap (0.42/0.72 in),
+##                  all at ONE shared stomp height (deck - 90)
+##   plain (~18%) — a short blob-free breather, plain jump
+##   bmega (~20%) — a wide blob-free gap that demands a built platform
+## Decks are narrow (210-290) and FLAT (drift ±30) so the flow chain works:
+## stomp bounce (-1000) plus the refreshed tap-jump at bounce apex reaches
+## ~1.1*v — enough to carry from a late blob across the deck onto the next
+## gap's blob without ever touching down.
 func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
-	# teach-in: the narrowest bridge gaps, wide pillars, always one blob
+	# teach-in: single blobs, the narrowest gaps, wide pillars
 	var teach := _is_teach(d)
-	var gap := rng.randf_range(0.75 * v, 0.85 * v) if teach else rng.randf_range(0.75 * v, 1.05 * v)
-	var w := rng.randf_range(400.0, 500.0) if teach else rng.randf_range(280.0, 400.0)
-	var top_y := clampf(last_top_y + rng.randf_range(-60.0, 60.0), BASE_Y_MIN, BASE_Y_MAX)
+	var top_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
+	var kind := "blob"
+	if not teach:
+		var r := rng.randf()
+		if r < 0.18:
+			kind = "plain"
+		elif r < 0.38:
+			kind = "bmega"
+	var gap: float
+	var w: float
+	var blobs := 0
+	if kind == "plain":
+		gap = rng.randf_range(0.42, 0.52) * v
+		w = rng.randf_range(240.0, 320.0)
+	elif kind == "bmega":
+		gap = rng.randf_range(1.1, 1.35) * v
+		w = rng.randf_range(280.0, 360.0)
+	elif teach:
+		gap = rng.randf_range(0.7, 0.85) * v
+		w = rng.randf_range(400.0, 500.0)
+		blobs = 1
+	else:
+		var two := rng.randf() < 0.45
+		gap = (rng.randf_range(1.05, 1.3) if two else rng.randf_range(0.7, 0.9)) * v
+		w = rng.randf_range(210.0, 290.0)
+		blobs = 2 if two else 1
+	blobs = mini(blobs, budget)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
 
-	# stepping-stone blobs, one per jump-length of gap, at stomp height
-	var blobs := 1 if teach or gap < 0.9 * v else 2
-	blobs = mini(blobs, budget)
+	# singles hang at the full jump's descent point; doubles one bounce
+	# apart, the second near the far edge so the chain can carry onward
 	var deck_y := minf(last_top_y, top_y)
-	var seg := gap / float(blobs)
-	for j in range(blobs):
-		var left := next_x + seg * float(j) + 60.0
-		var right := next_x + seg * float(j + 1) - 60.0
-		var b := SpikeBlob.new(left, right)
-		b.position = Vector2((left + right) * 0.5, deck_y - 90.0)
+	var fracs: Array = []
+	if blobs == 1:
+		fracs = [rng.randf_range(0.48, 0.56)]
+	elif blobs == 2:
+		fracs = [0.42, 0.72]
+	for f in fracs:
+		var bx: float = next_x + gap * f
+		var b := SpikeBlob.new(bx - 40.0, bx + 40.0)
+		b.position = Vector2(bx, deck_y - 90.0)
 		b.speed = enemy_speed_for(d)
 		add_child(b)
 
 	var used := blobs
-	if used < budget and rng.randf() < 0.5:
+	if kind == "bmega":
+		# the build toll pays out over the emptiness, like FOUNDATIONS megas
+		_place_coin(Vector2(next_x + gap * 0.5, deck_y - 190.0))
+		used += 1
+	elif used < budget and rng.randf() < 0.5:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
 		used += 1
 
@@ -488,8 +524,8 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": false,
 		"enemies": blobs, "entities": used, "climb": 0,
-		"void": false, "pillar": false, "bridge": true, "stars": 0,
-		"rise": rise, "speed": v,
+		"void": false, "pillar": false, "bridge": true, "bkind": kind,
+		"stars": 0, "rise": rise, "speed": v,
 	}
 
 
