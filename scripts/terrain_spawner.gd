@@ -451,23 +451,32 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var w := rng.randf_range(1.1 * v, 1.4 * v) if teach else rng.randf_range(0.75 * v, 1.1 * v)
 	var start := next_x - ov
 	flip_strip_start = start
+	var used := 0
+	if rng.randf() < 0.6:
+		# crystals ride the FLIP TRANSIT itself: sampled from the corridor-
+		# crossing free-fall arc (gravity 3300 from rest), fired a beat into
+		# the shared window — chasing the mana IS taking the flip on time.
+		# Random placements read as noise in this level (Neven): fragments
+		# must draw the optimal line, and here the line is the flip.
+		var x0 := start + 0.25 * ov
+		for tau: float in [0.2, 0.36, 0.5]:
+			var fall := 1650.0 * tau * tau
+			var fy := (floor_y - 20.0 - fall) if flip_on_floor \
+					else (floor_y - FLIP_CORRIDOR + 20.0 + fall)
+			_place_coin(Vector2(x0 + v * tau, fy))
+		used = 3
 	if flip_on_floor:
 		_place_ceiling(start, floor_y - FLIP_CORRIDOR, w)
 	else:
 		_place_chunk(start, floor_y, w)
 		last_top_y = floor_y
 	flip_on_floor = not flip_on_floor
-	var used := 0
-	if rng.randf() < 0.5:
-		# crystal mid-corridor over the flip window: timing is the detour
-		_place_coin(Vector2(start + ov * 0.5, floor_y - FLIP_CORRIDOR * 0.5))
-		used = 1
 	next_x = start + w
 	return {
 		"gap": -ov, "width": w, "top_y": floor_y, "mega": false,
 		"enemies": 0, "entities": used, "climb": 0,
 		"void": false, "pillar": false, "flip": true, "dead": false,
-		"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
+		"arc": used == 3, "overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
 	}
 
 

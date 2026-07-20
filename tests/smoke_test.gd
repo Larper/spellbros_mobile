@@ -675,6 +675,8 @@ func _run_tests() -> void:
 	_check(flipb["dead"] > 0 and flipb["dead"] < 40, "flipside dead zones present but not dominant")
 	# dead zones must be affordable: crystals in the band outpay the builds
 	_check(flipb["mana"] >= flipb["builds"] * 0.8, "flipside build economy")
+	# and the crystals draw the flip line: transit-arc trails on most chains
+	_check(flipb["arc"] > 20, "flipside crystals ride the flip arcs")
 	# UMBRA and SPELLBROS run the standard generator (their twists live in
 	# lighting and the echo bro); the band loop above already audits them
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
@@ -724,7 +726,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "spring": 0, "svoid": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
-			"b1err": 0.0, "bsperr": 0.0,
+			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -757,6 +759,8 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["spring"] += 1
 		if s.get("svoid", false):
 			stats["svoid"] += 1
+		if s.get("arc", false):
+			stats["arc"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		stats["max_top"] = maxf(stats["max_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
