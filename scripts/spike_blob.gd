@@ -34,6 +34,7 @@ func _init(l: float, r: float) -> void:
 
 
 func _ready() -> void:
+	add_to_group("blobs")  # the SPELLBROS brother scans this group to burn
 	body_entered.connect(_on_body_entered)
 
 
@@ -83,12 +84,10 @@ func _on_body_entered(body: Node2D) -> void:
 
 ## A touch that would kill: the purple shield absorbs one such hit — the
 ## bubble pops, the blob pops with it (no bounce, no bounty), the run lives.
+## (The SPELLBROS brother is no guardian anymore: he burns blobs BEFORE
+## contact, for mana — an empty pool means this path is live again.)
 func _lethal(p: Player) -> void:
 	var main = get_tree().get_first_node_in_group("main")
-	# SPELLBROS: the echo brother intercepts one hit per recharge
-	if main and main.bro and main.bro.try_guard(global_position):
-		_pop()
-		return
 	if p.shielded:
 		p.break_shield()
 		if main:

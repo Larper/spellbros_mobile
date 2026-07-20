@@ -158,6 +158,8 @@ func _spawn_chunk() -> Dictionary:
 		return _spawn_bridge_chunk(d, v, budget)
 	if lv == Levels.FLIPSIDE:
 		return _spawn_flip_chunk(d, v)
+	if lv == Levels.BROS:
+		return _spawn_bros_chunk(d, v)
 
 	# wind-down (standing rule: gentle hand-offs on BOTH edges): the last
 	# meters of every standard-generator band drop megas, enemies and climb
@@ -596,6 +598,89 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 		"void": false, "pillar": false, "bridge": true, "bkind": "blob",
 		"blobs": blobs, "b1": blob_xs[0],
 		"b2": blob_xs[1] if blobs == 2 else 0.0,
+		"stars": 0, "rise": rise, "speed": v,
+	}
+
+
+## SPELLBROS level (Neven's spec, round 2): the crimson brother overhead
+## burns the blob ahead for 1 mana each, so the band is LONG GAUNTLET
+## decks lined with blobs, split by blob-free mega crossings that drain
+## the pool the other way (a built platform). The gauntlet geometry is
+## the same chain math as BLOB BRIDGES, so a dry pool is stomped through:
+##   first blob 0.65*v past the takeoff edge (a deck-level crown sits
+##     ~62 px up: the tap-at-the-edge jump falls through it there);
+##   blobs 0.6*v apart — one passive bounce, auto-chain;
+##   tail 0.72-0.85*v — the last bounce (0.663*v of carry) lands ON deck.
+## Fragment arcs hover at the bounce-apex midpoints (deck - 200), some
+## orange +3: farming the line by hand is how the burn pool refills.
+func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
+	# wind-down into THE VOID: plain calm hops, nothing left to burn
+	if PHASE_VOID - d <= WIND_DOWN_M:
+		var out_gap := rng.randf_range(0.36, 0.46) * v
+		var out_w := rng.randf_range(500.0, 700.0)
+		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
+		var out_x := next_x + out_gap
+		_place_chunk(out_x, out_y, out_w)
+		var out_used := 0
+		if rng.randf() < 0.4:
+			_place_coin(Vector2(out_x + rng.randf_range(80.0, out_w - 80.0), out_y - 60.0))
+			out_used = 1
+		var out_rise := maxf(0.0, last_top_y - out_y)
+		next_x = out_x + out_w
+		last_top_y = out_y
+		return {
+			"gap": out_gap, "width": out_w, "top_y": out_y, "mega": false,
+			"enemies": 0, "entities": out_used, "climb": 0,
+			"void": false, "pillar": false, "bros": true, "gkind": "out",
+			"blobs": 0, "stars": 0, "rise": out_rise, "speed": v,
+		}
+	var teach := _is_teach(d)
+	var top_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 700.0, 920.0)
+	if not teach and rng.randf() < 0.3:
+		# blob-free crossing: the pool's other drain is a built platform
+		var mgap := rng.randf_range(0.95, 1.25) * v
+		var mw := rng.randf_range(300.0, 400.0)
+		var mx := next_x + mgap
+		_place_chunk(mx, top_y, mw)
+		_place_coin(Vector2(next_x + mgap * 0.5, minf(last_top_y, top_y) - 190.0))
+		var mrise := maxf(0.0, last_top_y - top_y)
+		next_x = mx + mw
+		last_top_y = top_y
+		return {
+			"gap": mgap, "width": mw, "top_y": top_y, "mega": false,
+			"enemies": 0, "entities": 1, "climb": 0,
+			"void": false, "pillar": false, "bros": true, "gkind": "gmega",
+			"blobs": 0, "stars": 0, "rise": mrise, "speed": v,
+		}
+	# gauntlet deck: the blob line, teach-ins keep it short
+	var k := 2 if teach else 2 + rng.randi() % 3
+	var gap := rng.randf_range(0.40, 0.52) * v
+	var lead := 0.65 * v - gap
+	var tail := rng.randf_range(0.72, 0.85) * v
+	var w := lead + 0.6 * v * float(k - 1) + tail
+	var x := next_x + gap
+	_place_chunk(x, top_y, w)
+	var espeed := enemy_speed_for(d)
+	for i in range(k):
+		var bx: float = x + lead + 0.6 * v * float(i)
+		var b := SpikeBlob.new(bx - 40.0, bx + 40.0)
+		b.position = Vector2(bx, top_y - 30.0)
+		b.speed = espeed
+		add_child(b)
+	var coins := 0
+	for i in range(k - 1):
+		if rng.randf() < 0.65:
+			var amt := 3 if rng.randf() < 0.18 else 1
+			_place_coin(Vector2(x + lead + 0.6 * v * (float(i) + 0.5), top_y - 200.0), amt)
+			coins += 1
+	var rise := maxf(0.0, last_top_y - top_y)
+	next_x = x + w
+	last_top_y = top_y
+	return {
+		"gap": gap, "width": w, "top_y": top_y, "mega": false,
+		"enemies": k, "entities": k + coins, "climb": 0,
+		"void": false, "pillar": false, "bros": true, "gkind": "gaunt",
+		"blobs": k, "b1": gap + lead, "bsp": 0.6 * v, "tail": tail,
 		"stars": 0, "rise": rise, "speed": v,
 	}
 

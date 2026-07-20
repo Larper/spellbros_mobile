@@ -531,43 +531,38 @@ func _run_tests() -> void:
 	_check(dark_ok and lantern_lit and beacon, "umbra darkness")
 	_check(main.wizard_light.texture_scale > 3.4, "umbra halo widened")
 
-	# SPELLBROS: the echo brother activates, mirrors, and banks crystals
+	# SPELLBROS: the crimson brother hovers overhead and burns the blob
+	# ahead for 1 mana; with a dry pool he burns nothing and blobs are
+	# lethal again (the pressure that makes the gauntlet a level)
 	main.distance_m = 1600.0
-	p.set_physics_process(false)  # hold the wizard still so the bro stays put
+	for n in get_nodes_in_group("blobs"):  # (self IS the SceneTree here)
+		n.queue_free()  # clear strays so the burn test targets OUR blob
 	await create_timer(0.1).timeout
 	var bro_on: bool = main.bro.active and main.bro.visible
-	var coins_pre: int = main.coins
-	main.spawner._place_coin(main.bro.global_position)
+	main.coins = 2
+	main.hud.update_coins(main.coins)
+	main.bro.burn_cd = 0.0
+	var bblob := SpikeBlob.new(0.0, 100.0)
+	bblob.global_position = p.global_position + Vector2(380.0, -20.0)
+	main.add_child(bblob)
 	await create_timer(0.15).timeout
-	p.set_physics_process(true)
-	print("TEST echobro: active=%s coins %d -> %d (expect +1, bro collected)" % [
-		bro_on, coins_pre, main.coins])
-	_check(bro_on and main.coins == coins_pre + 1, "echo bro")
-
-	# the bond, consequential: the bro intercepts one kill, then recharges
-	var gblob := SpikeBlob.new(0.0, 100.0)
-	gblob.global_position = p.global_position + Vector2(60.0, 0.0)
-	main.add_child(gblob)
-	p.velocity.y = 0.0
-	gblob._on_body_entered(p)
-	var guarded: bool = not p.dead and gblob.dying and main.bro.guard_cd > 0.0
-	var gblob2 := SpikeBlob.new(0.0, 100.0)
-	gblob2.global_position = p.global_position + Vector2(60.0, 0.0)
-	main.add_child(gblob2)
-	gblob2._on_body_entered(p)
-	print("TEST broguard: guarded=%s (expect true) recharging_lethal=%s (expect true)" % [
-		guarded, p.dead])
-	_check(guarded and p.dead, "echo bro guardian")
-	gblob.queue_free()
-	gblob2.queue_free()
-	p.dead = false
-	p.collision_mask = 1
-	p.rotation = 0.0
-	p.velocity = Vector2.ZERO
-	main.game_over = false
-	main.hud.over_root.visible = false
+	var burned: bool = bblob.dying and main.coins == 1
+	main.coins = 0
+	main.hud.update_coins(main.coins)
+	main.bro.burn_cd = 0.0
+	var bblob2 := SpikeBlob.new(0.0, 100.0)
+	bblob2.global_position = p.global_position + Vector2(380.0, -20.0)
+	main.add_child(bblob2)
+	await create_timer(0.15).timeout
+	var dry_holds: bool = not bblob2.dying
+	print("TEST spellbro: active=%s burned=%s (expect true true) dry_no_burn=%s (expect true)" % [
+		bro_on, burned, dry_holds])
+	_check(bro_on and burned and dry_holds, "spellbro burns with mana")
+	if is_instance_valid(bblob):  # the burn's pop tween already freed it
+		bblob.queue_free()
+	if is_instance_valid(bblob2):
+		bblob2.queue_free()
 	main.distance_m = 20.0
-	main.bro.active = false
 
 	# S / D dev keys grant the shield and the double jump on demand
 	p.shielded = false
@@ -666,10 +661,11 @@ func _run_tests() -> void:
 			int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
-		# spring crossings (5-fragment arc trails) are exempt like the void:
-		# their trails ARE the pad economy, not chunk clutter
+		# spring crossings (5-fragment arc trails) and SPELLBROS gauntlets
+		# (blob lines + their fragment arcs) are exempt like the void:
+		# their trails ARE the economy, not chunk clutter
 		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) \
-				or s["voids"] > 0 or s["svoid"] > 0,
+				or s["voids"] > 0 or s["svoid"] > 0 or s["gaunt"] > 0,
 				"entity budget at d=%d" % int(d))
 	# level/phase-shape expectations, derived from the constants so they
 	# stay valid while tuning configs
@@ -684,7 +680,10 @@ func _run_tests() -> void:
 	# (enemies per ELIGIBLE chunk; climb waves carry none and dilute raw counts)
 	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
 	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
-	_check(mid["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
+	# star spawns are rare (~2% of eligible chunks): 80-chunk samples rolled
+	# zero once in ~10 runs, so this check gets its own 400-chunk probe
+	var starb := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 400)
+	_check(starb["stars"] > 0, "stars spawn after enemy phase")
 	# foundations climb waves (from PHASE_CLIMB, inside level 0)
 	var climbb := _probe(130.0, 80)
 	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
@@ -723,6 +722,17 @@ func _run_tests() -> void:
 	# raised crystal chance, because mana is sight there (Neven: it starved)
 	var umbrab := _probe(Levels.start_m(Levels.UMBRA) + 100.0, 80)
 	_check(umbrab["mana"] >= 0.8, "umbra runs rich in fragments")
+	# SPELLBROS: gauntlet decks dominate, mega crossings mix in, and the
+	# chain geometry is exact so a dry-mana gauntlet stays stompable
+	var brosb := _probe(Levels.start_m(Levels.BROS) + 50.0, 80)
+	_check(brosb["gaunt"] > 40 and brosb["gmega"] > 5, "spellbros band mix")
+	_check(brosb["enemies"] > 120 and brosb["b1err"] < 0.5 and brosb["bsperr"] < 0.5,
+			"spellbros gauntlet chains")
+	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
+	_check(teach_bros["gaunt"] == 80 and teach_bros["enemies"] == 160,
+			"spellbros teach-in: short gauntlets")
+	var bros_out := _probe(TerrainSpawner.PHASE_VOID - 20.0, 80)
+	_check(bros_out["enemies"] == 0 and bros_out["mega"] == 0, "spellbros wind-down calm")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 	# teach-ins: every level's first ~45 m is its mechanic in gentle form
@@ -768,7 +778,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.flip_strip_start = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"dead": 0, "spring": 0, "svoid": 0,
+			"dead": 0, "spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
@@ -805,6 +815,10 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["svoid"] += 1
 		if s.get("arc", false):
 			stats["arc"] += 1
+		if s.get("gkind", "") == "gaunt":
+			stats["gaunt"] += 1
+		elif s.get("gkind", "") == "gmega":
+			stats["gmega"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		stats["max_top"] = maxf(stats["max_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
@@ -815,6 +829,22 @@ func _probe(d: float, n: int) -> Dictionary:
 		var one_build := 1.418 * v + 240.0  # jump + platform deck + jump
 		if s["void"]:
 			stats["builds"] += ceilf(s["gap"] / one_build)
+		elif s.get("bros", false):
+			if s.get("gkind", "") == "gmega":
+				# blob-free crossing: the build IS the crossing
+				stats["builds"] += 1.0
+				if s["gap"] > one_build:
+					stats["bad"] += 1
+			elif s["gap"] > 0.68 * v:
+				stats["bad"] += 1  # gauntlet entries / wind-down: plain jumps
+			if s.get("gkind", "") == "gaunt":
+				# the chain: first blob one edge-jump out (0.65*v to a
+				# deck-level crown), 0.6*v spacing (one passive bounce),
+				# and a tail that catches the last bounce's 0.663*v carry
+				stats["b1err"] = maxf(stats["b1err"], absf(s["b1"] - 0.65 * v))
+				stats["bsperr"] = maxf(stats["bsperr"], absf(s["bsp"] - 0.6 * v))
+				if s["tail"] < 0.71 * v or s["tail"] > 0.9 * v:
+					stats["bad"] += 1
 		elif s.get("bridge", false):
 			if s.get("bkind", "blob") == "out":
 				# blob-free wind-down: a plain jump must clear it
