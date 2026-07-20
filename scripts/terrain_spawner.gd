@@ -3,8 +3,8 @@ extends Node2D
 
 ## Endless procedural terrain with staged difficulty phases (HARD tuning —
 ## see PHASE_* constants for the exact meters). The Levels ladder overlays
-## themed bands on top: SPRINGS (100-200, frequent climb waves + every build
-## a launcher) and BLOB BRIDGES (200-300, _spawn_bridge_chunk). Phases:
+## themed bands on top: SPRINGS (deck sections split by spring-pad void
+## crossings) and BLOB BRIDGES (_spawn_bridge_chunk). Phases:
 ##   PHASE_BUILD   mega gaps appear that require building
 ##   PHASE_ENEMY   enemies start to spawn
 ##   PHASE_CLIMB   climb waves: terrain staircases up beyond jump height
@@ -95,8 +95,9 @@ var void_y := START_GROUND_Y - 120.0
 # (true on entering the band — he arrives running the floor)
 var flip_on_floor := true
 
-# SPRINGS diagonal state: -1 climbing the sky, +1 descending to the deck
-var spring_dir := -1
+# SPRINGS rhythm state: pillars left in the current easy deck section;
+# when it reaches 0 the next chunk is a void crossing
+var spring_deck_left := 3
 
 
 func _ready() -> void:
@@ -252,43 +253,70 @@ func _spawn_chunk() -> Dictionary:
 	}
 
 
-## SPRINGS level, void-like (Neven's spec): open sky, sparse narrow pillars
-## riding rising and falling diagonals. Up-steps (220-300 px) outreach the
-## 207 px jump — the intended move is a spring-pad build (every build here
-## launches at -1500, a 341 px rise): drop a pad, launch, arc onto the next
-## pillar. Descents are free-fall runs. Crystals pay the pad tolls.
+## SPRINGS level (Neven's spec, round 2): an alternating rhythm, not one
+## relentless diagonal. DECK sections — a few pillars at near-level /
+## gentle-staircase heights with plain jumpable gaps — are breathers that
+## cost no mana. Between sections come VOID CROSSINGS (_spawn_spring_void).
 func _spawn_spring_chunk(d: float, v: float) -> Dictionary:
+	if spring_deck_left <= 0:
+		return _spawn_spring_void(d, v)
+	spring_deck_left -= 1
 	var teach := _is_teach(d)
-	# ride the diagonal between the sky bound and the deck
-	if last_top_y <= 400.0:
-		spring_dir = 1
-	elif last_top_y >= 840.0:
-		spring_dir = -1
-	var gap: float
-	var dy: float
-	if spring_dir == -1:
-		dy = -(rng.randf_range(200.0, 240.0) if teach else rng.randf_range(220.0, 300.0))
-		gap = rng.randf_range(0.35, 0.45) * v if teach else rng.randf_range(0.4, 0.55) * v
-	else:
-		dy = rng.randf_range(200.0, 300.0)
-		gap = rng.randf_range(0.5, 0.65) * v if teach else rng.randf_range(0.55, 0.75) * v
-	var w := rng.randf_range(300.0, 380.0) if teach else rng.randf_range(220.0, 320.0)
-	var top_y := clampf(last_top_y + dy, 340.0, 940.0)
+	var gap := (rng.randf_range(0.34, 0.42) if teach else rng.randf_range(0.36, 0.5)) * v
+	var w := rng.randf_range(420.0, 560.0) if teach else rng.randf_range(340.0, 480.0)
+	# staircase drift, always within plain-jump reach (rise <= 110 keeps
+	# ~16% margin at gap 0.5*v); after a crossing pushed the deck skyward,
+	# bias the stairs back down toward the base band
+	var dy := rng.randf_range(-110.0, 110.0)
+	if teach:
+		dy = rng.randf_range(-60.0, 60.0)
+	elif last_top_y < 560.0:
+		dy = rng.randf_range(20.0, 130.0)
+	var top_y := clampf(last_top_y + dy, 420.0, 940.0)
 	var rise := maxf(0.0, last_top_y - top_y)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
 	var used := 0
-	if rng.randf() < (0.95 if teach else 0.85):
-		# crystal on the arc between the pillars: income tracks the tolls
-		_place_coin(Vector2(next_x + gap * 0.6, minf(last_top_y, top_y) - 120.0))
+	if rng.randf() < 0.35:
+		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
 		used = 1
 	next_x = x + w
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": false,
 		"enemies": 0, "entities": used, "climb": 0,
-		"void": false, "pillar": false, "spring": true, "stars": 0,
-		"rise": rise, "speed": v,
+		"void": false, "pillar": false, "spring": true, "svoid": false,
+		"stars": 0, "rise": rise, "speed": v,
+	}
+
+
+## The void crossing between deck sections: open sky far beyond any jump,
+## with a diagonal trail of fragments rising toward a higher far deck. The
+## intended move: drop ONE spring pad in the gap (every build here launches
+## at -1500, a 341 px rise), ride the launch up the fragment diagonal, land
+## on the next deck section. The 3-crystal trail out-pays the 1-mana pad.
+func _spawn_spring_void(d: float, v: float) -> Dictionary:
+	var teach := _is_teach(d)
+	spring_deck_left = 2 + rng.randi() % 3  # 2-4 easy pillars follow
+	var gap := (rng.randf_range(0.65, 0.8) if teach else rng.randf_range(0.8, 1.0)) * v
+	var up := rng.randf_range(60.0, 120.0) if teach else rng.randf_range(100.0, 200.0)
+	var w := rng.randf_range(420.0, 540.0) if teach else rng.randf_range(380.0, 500.0)
+	var far_y := clampf(last_top_y - up, 360.0, 900.0)
+	var rise := maxf(0.0, last_top_y - far_y)
+	var x := next_x + gap
+	_place_chunk(x, far_y, w)
+	# the fragment diagonal: takeoff edge up to the far deck's crown
+	for i in range(3):
+		var f := (float(i) + 1.0) / 4.0
+		_place_coin(Vector2(next_x + gap * f,
+				lerpf(last_top_y - 90.0, far_y - 110.0, f)))
+	next_x = x + w
+	last_top_y = far_y
+	return {
+		"gap": gap, "width": w, "top_y": far_y, "mega": false,
+		"enemies": 0, "entities": 3, "climb": 0,
+		"void": false, "pillar": false, "spring": true, "svoid": true,
+		"stars": 0, "rise": rise, "speed": v,
 	}
 
 
@@ -442,9 +470,7 @@ func _spawn_void_segment() -> Dictionary:
 func _update_climb_state(d: float) -> void:
 	if climb_dir == 0:
 		flat_chunks_since_wave += 1
-		# occasional set-piece: needs a breather of flat terrain first.
-		# The SPRINGS level doubles down on verticality: waves come more
-		# often and with barely a breather, since every build launches.
+		# occasional set-piece: needs a breather of flat terrain first
 		if d >= PHASE_CLIMB and last_top_y > 800.0 and not _is_teach(d) \
 				and flat_chunks_since_wave >= CLIMB_COOLDOWN and rng.randf() < CLIMB_CHANCE:
 			climb_dir = -1

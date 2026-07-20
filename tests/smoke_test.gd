@@ -437,6 +437,8 @@ func _run_tests() -> void:
 	_check(springb["spring"] == 80 and springb["enemies"] == 0 and springb["mega"] == 0,
 			"springs void band")
 	_check(springb["mana"] >= springb["builds"] * 0.8, "springs pad economy")
+	# the rhythm: easy deck sections split by void crossings (~1 in 3-5)
+	_check(springb["svoid"] > 8 and springb["svoid"] < 40, "springs deck/void rhythm")
 	# BLOB BRIDGES band: every chunk a bridge, blobs as stepping stones
 	var bridgeb := _probe(Levels.start_m(Levels.BRIDGES) + 50.0, 80)
 	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 80 and bridgeb["climbs"] == 0,
@@ -476,9 +478,10 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.flat_chunks_since_wave = 99
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
+	main.spawner.spring_deck_left = 3
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"dead": 0, "spring": 0, "min_top": 9999.0, "bad": 0,
+			"dead": 0, "spring": 0, "svoid": 0, "min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -509,6 +512,8 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["dead"] += 1
 		if s.get("spring", false):
 			stats["spring"] += 1
+		if s.get("svoid", false):
+			stats["svoid"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
@@ -530,14 +535,20 @@ func _probe(d: float, n: int) -> Dictionary:
 			if s["gap"] > 0.5 * v + 240.0:
 				stats["bad"] += 1
 		elif s.get("spring", false):
-			# rising steps demand one launcher pad; the -1500 arc must reach
-			if s["rise"] > 0.0:
+			if s.get("svoid", false):
+				# void crossing: one pad dropped in the gap (reachable by a
+				# jump covering ~0.45*v of it), then the -1500 spring arc
+				# onto the higher far deck; assume ~60 px of fall onto the
+				# pad before it fires
 				stats["builds"] += 1.0
-				var t_reach := (1500.0 + sqrt(maxf(0.0, 2250000.0 - 6600.0 * s["rise"]))) / 3300.0
-				if s["rise"] > 320.0 or s["gap"] > 0.92 * t_reach * v:
+				var t_sp := (1500.0 + sqrt(maxf(0.0, 2250000.0 - 6600.0 * (s["rise"] + 60.0)))) / 3300.0
+				if s["rise"] > 260.0 or s["gap"] > (0.45 + 0.92 * t_sp) * v:
 					stats["bad"] += 1
-			elif s["gap"] > 0.8 * v:
-				stats["bad"] += 1
+			else:
+				# deck pillar: a plain jump must clear it
+				var disc_s: float = 1170.0 * 1170.0 - 6600.0 * s["rise"]
+				if disc_s < 0.0 or s["gap"] > v * (1170.0 + sqrt(disc_s)) / 3300.0:
+					stats["bad"] += 1
 		elif s.get("flip", false):
 			# chain strip: needs a real shared flip window (0.25 s of travel)
 			# AND enough strip beyond it to land the ~0.54 s flip transit
