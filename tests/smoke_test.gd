@@ -371,6 +371,20 @@ func _run_tests() -> void:
 			"banner fires on its short lead")
 	main.distance_m = 20.0
 
+	# FLIPSIDE banner: quiet through the bridges wind-down, fired ON the
+	# boundary — the runway underneath is the reading room
+	main.announced_level = 2
+	main.hud.banner_label.text = ""
+	main.distance_m = Levels.start_m(Levels.FLIPSIDE) - 5.0
+	await create_timer(0.05).timeout
+	var flip_quiet: bool = main.hud.banner_label.text == ""
+	main.distance_m = Levels.start_m(Levels.FLIPSIDE) + 1.0
+	await create_timer(0.05).timeout
+	print("TEST flipbanner: quiet_before=%s text=\"%s\" (expect true, LEVEL 4: FLIPSIDE)" % [
+		flip_quiet, main.hud.banner_label.text])
+	_check(flip_quiet and main.hud.banner_label.text == "LEVEL 4: FLIPSIDE",
+			"flipside banner on the runway")
+
 	# FLIPSIDE: buffered grounded flip, spam guard, solid builds
 	main.distance_m = 950.0
 	p.flip_cooldown = 0.0
@@ -672,10 +686,13 @@ func _run_tests() -> void:
 	var teach_bridge := _probe(Levels.start_m(Levels.BRIDGES) + 10.0, 80)
 	_check(teach_bridge["bridge"] == 80 and teach_bridge["enemies"] == 80,
 			"bridges teach-in: single blobs only")
-	# FLIPSIDE opening runway (first ~20 m): continuous plain floor
+	# FLIPSIDE opening runway (first ~20 m): continuous plain floor, and
+	# DEAD level — any height drift inside the overlapping strips is a lip
+	# that wedges or drops the wizard at the boundary
 	var runway := _probe(Levels.start_m(Levels.FLIPSIDE) + 10.0, 80)
 	_check(runway["flip"] == 80 and runway["dead"] == 0 and runway["min_top"] >= 800.0,
 			"flipside opening runway")
+	_check(runway["min_top"] == runway["max_top"], "flipside runway is step-free")
 	# then the teach-in proper: chain strips, no dead zones yet
 	var teach_flip := _probe(Levels.start_m(Levels.FLIPSIDE) + 30.0, 80)
 	_check(teach_flip["flip"] == 80 and teach_flip["dead"] == 0,
@@ -706,7 +723,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "spring": 0, "svoid": 0,
-			"min_top": 9999.0, "bad": 0, "b1err": 0.0, "bsperr": 0.0,
+			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
+			"b1err": 0.0, "bsperr": 0.0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -740,6 +758,7 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s.get("svoid", false):
 			stats["svoid"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
+		stats["max_top"] = maxf(stats["max_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
 		span += s["gap"] + s["width"]

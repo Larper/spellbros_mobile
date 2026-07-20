@@ -396,9 +396,12 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 		return _spawn_flip_outro(v)
 	# opening runway: one continuous plain floor — time to read the
 	# FLIPSIDE banner before the first flip (Neven landed out of BRIDGES
-	# straight into a flip prompt with no time to react)
+	# straight into a flip prompt with no time to react).
+	# EXACTLY at last_top_y: runway strips overlap what came before, and
+	# any height drift inside that overlap is a lip that wedges (or drops)
+	# the wizard right at the boundary — the step bug Neven hit.
 	if d - Levels.start_m(Levels.FLIPSIDE) < RUNWAY_M:
-		var run_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 800.0, 940.0)
+		var run_y := clampf(last_top_y, 800.0, 920.0)
 		var run_start := next_x - 0.3 * v
 		var run_w := (next_x - run_start) + rng.randf_range(1.0 * v, 1.4 * v)
 		_place_chunk(run_start, run_y, run_w)
@@ -519,7 +522,8 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	if Levels.start_m(Levels.FLIPSIDE) - d <= WIND_DOWN_M:
 		var out_gap := rng.randf_range(0.38, 0.48) * v
 		var out_w := rng.randf_range(500.0, 700.0)
-		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
+		# 800+ matches the runway's clamp band, so the hand-off can't step
+		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 800.0, 920.0)
 		var out_x := next_x + out_gap
 		_place_chunk(out_x, out_y, out_w)
 		var out_used := 0

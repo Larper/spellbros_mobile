@@ -234,7 +234,13 @@ func _lowest_ground_ahead() -> float:
 
 
 func banner_lead_for(lv: int) -> float:
-	return BANNER_LEAD_UMBRA_M if lv == Levels.UMBRA else BANNER_LEAD_M
+	if lv == Levels.UMBRA:
+		return BANNER_LEAD_UMBRA_M
+	if lv == Levels.FLIPSIDE:
+		# fires ON the boundary: the opening runway IS the reading room, and
+		# announcing during the bridges wind-down was still too soon (Neven)
+		return 0.0
+	return BANNER_LEAD_M
 
 
 func run_speed_for(d: float) -> float:
