@@ -147,6 +147,18 @@ func _run_tests() -> void:
 	print("TEST camahead: target flat %.0f, low pillar ahead %.0f (expect >= 200 px lower)" % [t_flat, t_low])
 	_check(t_low - t_flat >= 200.0, "camera pillar lookdown")
 
+	# a hard fall (past flat-jump landing speed) forces the frame down too
+	await create_timer(0.05).timeout  # let the probe chunk above actually free
+	p.global_position.y = 600.0
+	p.velocity.y = 0.0
+	var t_still: float = main.camera_target_y()
+	p.velocity.y = 2200.0
+	var t_fall: float = main.camera_target_y()
+	p.velocity.y = 0.0
+	p.global_position.y = y_saved
+	print("TEST camfall: still %.0f falling %.0f (expect >= 300 px lower)" % [t_still, t_fall])
+	_check(t_fall - t_still >= 300.0, "camera fall lookdown")
+
 	# no-mana path must refuse to build
 	main.coins = 0
 	main.build_cooldown = 0.0

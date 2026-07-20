@@ -213,6 +213,11 @@ func camera_target_y() -> float:
 	# already on screen while descending. Chunk tops are static world data,
 	# so this never pulses with the jump arc.
 	var target := player.global_position.y - 60.0
+	# A hard fall drags the frame down ahead of the wizard: what's below
+	# matters more than the sky above (Neven: pillar tops arrived unseen).
+	# Threshold 1150 sits just under a flat jump's landing speed (1170),
+	# so ordinary hops never cross it and nothing pulses.
+	target += minf(maxf(0.0, player.velocity.y - 1150.0) * 0.5, 380.0)
 	var ahead := _lowest_ground_ahead()
 	if ahead > 0.0:
 		# 360/240 keep the same screen fractions the pre-zoom 450/300 gave the
