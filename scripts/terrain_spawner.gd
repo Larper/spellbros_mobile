@@ -271,8 +271,15 @@ func _spawn_chunk() -> Dictionary:
 	if lv == Levels.UMBRA:
 		mana_chance = 0.65
 	if used < budget and rng.randf() < mana_chance:
-		var coin_y := top_y - 60.0 if rng.randf() < 0.7 else top_y - 250.0
-		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
+		if lv == Levels.UMBRA:
+			# route light: the second fragment sits mid/far deck at running
+			# height, never stacked over (or floating above) the deck-start
+			# beacon — two lit points on one deck must read as "run on",
+			# not as a confusing cluster at the left edge (Neven)
+			_place_coin(Vector2(x + rng.randf_range(w * 0.5, w - 80.0), top_y - 60.0))
+		else:
+			var coin_y := top_y - 60.0 if rng.randf() < 0.7 else top_y - 250.0
+			_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
 		used += 1
 
 	# rare Star of Levity: a stored double jump. Hung over the SAFE middle of
