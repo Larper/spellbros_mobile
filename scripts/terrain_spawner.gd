@@ -159,10 +159,22 @@ func _spawn_chunk() -> Dictionary:
 	if lv == Levels.FLIPSIDE:
 		return _spawn_flip_chunk(d, v)
 
-	_update_climb_state(d)
+	# wind-down (standing rule: gentle hand-offs on BOTH edges): the last
+	# meters of every standard-generator band drop megas, enemies and climb
+	# waves and return to calm plain hops, so the next level's teach-in is
+	# entered composed — the old FOUNDATIONS ended slamming a swarm straight
+	# into the SPRINGS boundary
+	var wind: bool = lv + 1 < Levels.count() \
+			and Levels.start_m(lv + 1) - d <= WIND_DOWN_M
+	if wind:
+		climb_dir = 0
+		climb_steps_left = 0
+	else:
+		_update_climb_state(d)
 
 	var teach := _is_teach(d)
-	var mega: bool = not teach and climb_dir == 0 and d >= PHASE_BUILD \
+	var calm := teach or wind
+	var mega: bool = not calm and climb_dir == 0 and d >= PHASE_BUILD \
 			and (force_mega or rng.randf() < minf(MEGA_CHANCE_BASE + 0.15 * t, MEGA_CHANCE_MAX))
 	force_mega = false
 	var gap: float
@@ -186,8 +198,9 @@ func _spawn_chunk() -> Dictionary:
 		dy = rng.randf_range(-40.0, 160.0)
 		if d >= PHASE_SWARM and rng.randf() < DOUBLE_MEGA_CHANCE:
 			force_mega = true
-	elif teach:
-		# teach-in: easy gaps, wide decks, near-flat — room to meet the twist
+	elif calm:
+		# teach-in / wind-down: easy gaps, wide decks, near-flat — room to
+		# meet the twist (entering) or to breathe before the next one (leaving)
 		gap = rng.randf_range(GAP_MIN_FRAC * v, 0.44 * v)
 		w = rng.randf_range(700.0, 950.0)
 		dy = rng.randf_range(-60.0, 60.0)
@@ -214,7 +227,7 @@ func _spawn_chunk() -> Dictionary:
 	# in a teach-in stretch)
 	var enemy_before := enemy_seen  # the shield gate reads the PRE-chunk state
 	var enemies := 0
-	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not teach:
+	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not calm:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
 		if rng.randf() < chance:
 			enemies = 1

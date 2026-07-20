@@ -37,6 +37,13 @@ const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the p
 ## before a missed stair jump can be answered with a build.
 const CAMERA_CHASE_CAP := 400.0
 const RESTART_LOCKOUT_MS := 600.0
+## Level banners run a short beat ahead of the boundary — enough to read,
+## not so early the text lies about where you are (announcing SPRINGS a
+## full wind-down early felt wrong to Neven). UMBRA is the exception: its
+## banner stays synced to the darkness gradient, which ramps from 60 m out,
+## because pitch black needs real preparation time.
+const BANNER_LEAD_M := 18.0
+const BANNER_LEAD_UMBRA_M := 45.0
 
 static var session_best := 0.0
 ## -1 = show the level-select menu; otherwise the level index to auto-start
@@ -159,13 +166,14 @@ func _physics_process(delta: float) -> void:
 		if lv > cur_level:
 			cur_level = lv
 			Levels.unlock(lv)
-		# the banner runs AHEAD of the boundary: it fires as the previous
-		# band's wind-down begins (Neven: announcing UMBRA at 1200 m, when
-		# UMBRA starts, is too late to prepare)
-		var ann := Levels.level_for(distance_m + TerrainSpawner.WIND_DOWN_M)
-		if ann > announced_level:
-			announced_level = ann
-			hud.show_level_banner("LEVEL %d: %s" % [ann + 1, Levels.level_name(ann)])
+		# the banner still runs AHEAD of the boundary (announcing a level as
+		# it starts is too late to prepare), but only by its own short lead
+		var nxt := announced_level + 1
+		if nxt < Levels.count() and distance_m + banner_lead_for(nxt) >= Levels.start_m(nxt):
+			# level_for swallows skipped bands when distance jumps (late starts)
+			announced_level = Levels.level_for(distance_m + banner_lead_for(nxt))
+			hud.show_level_banner("LEVEL %d: %s" % [announced_level + 1,
+					Levels.level_name(announced_level)])
 			audio.play("pickup")
 		# per-level state: darkness light, the echo brother, gravity hygiene
 		wizard_light.enabled = lv == Levels.UMBRA
@@ -223,6 +231,10 @@ func _lowest_ground_ahead() -> float:
 		if g.position.x <= px + 700.0 and g.position.x + g.width >= px:
 			lowest = maxf(lowest, g.position.y)
 	return lowest
+
+
+func banner_lead_for(lv: int) -> float:
+	return BANNER_LEAD_UMBRA_M if lv == Levels.UMBRA else BANNER_LEAD_M
 
 
 func run_speed_for(d: float) -> float:

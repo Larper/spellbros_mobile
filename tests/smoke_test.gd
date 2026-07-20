@@ -344,6 +344,21 @@ func _run_tests() -> void:
 	p.velocity = Vector2.ZERO
 	await create_timer(0.1).timeout
 
+	# banner lead: SPRINGS is announced a short beat before 300 m, not a
+	# whole wind-down early (Neven: 45 m ahead read as "too early")
+	main.announced_level = 0
+	main.hud.banner_label.text = ""
+	main.distance_m = Levels.start_m(Levels.SPRINGS) - main.BANNER_LEAD_M - 10.0
+	await create_timer(0.05).timeout
+	var banner_quiet: bool = main.hud.banner_label.text == ""
+	main.distance_m = Levels.start_m(Levels.SPRINGS) - main.BANNER_LEAD_M + 2.0
+	await create_timer(0.05).timeout
+	print("TEST bannerlead: quiet_before=%s text=\"%s\" (expect true, LEVEL 2: SPRINGS)" % [
+		banner_quiet, main.hud.banner_label.text])
+	_check(banner_quiet and main.hud.banner_label.text == "LEVEL 2: SPRINGS",
+			"banner fires on its short lead")
+	main.distance_m = 20.0
+
 	# FLIPSIDE: buffered grounded flip, spam guard, solid builds
 	main.distance_m = 950.0
 	p.flip_cooldown = 0.0
@@ -595,6 +610,11 @@ func _run_tests() -> void:
 	# foundations climb waves (from PHASE_CLIMB, inside level 0)
 	var climbb := _probe(130.0, 80)
 	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
+	# FOUNDATIONS wind-down: the band's last meters are calm plain hops —
+	# no swarm slams into the SPRINGS teach-in
+	var windb := _probe(Levels.start_m(Levels.SPRINGS) - 20.0, 80)
+	_check(windb["mega"] == 0 and windb["enemies"] == 0 and windb["climbs"] == 0
+			and windb["bad"] == 0, "foundations wind-down calm")
 	# SPRINGS band, void-like: pillar diagonals, no enemies, pads affordable
 	var springb := _probe(Levels.start_m(Levels.SPRINGS) + 50.0, 80)
 	_check(springb["spring"] == 80 and springb["enemies"] == 0 and springb["mega"] == 0,
