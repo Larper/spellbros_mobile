@@ -81,19 +81,20 @@ func _on_body_entered(body: Node2D) -> void:
 		_lethal(p)
 
 
-## A touch that would kill: the purple shield absorbs one such hit — the
-## bubble pops, the blob pops with it (no bounce, no bounty), the run lives.
+## A touch that would kill. Two interceptors, then death:
+##   1. the purple shield — already paid for, so it spends first;
+##   2. the SPELLBROS brother — burns the blob for 1 mana (stomps never
+##      reach here, so clean play costs nothing and pays bounties).
 func _lethal(p: Player) -> void:
 	var main = get_tree().get_first_node_in_group("main")
-	# SPELLBROS: the echo brother intercepts one hit per recharge
-	if main and main.bro and main.bro.try_guard(global_position):
-		_pop()
-		return
 	if p.shielded:
 		p.break_shield()
 		if main:
 			main.audio.play("squish")
 			main.float_text(global_position, "SHIELD SPENT", Color("b98cff"))
+		_pop()
+		return
+	if main and main.bro and main.bro.try_guard(global_position):
 		_pop()
 		return
 	p.die()

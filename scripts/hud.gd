@@ -8,6 +8,8 @@ extends CanvasLayer
 
 var score_label: Label
 var coin_label: Label
+var shield_chip: Label
+var star_chip: Label
 var hint_label: Label
 var no_mana_label: Label
 var pause_button: Button
@@ -17,6 +19,8 @@ var final_label: Label
 var best_label: Label
 var restart_label: Label
 var menu_root: Control
+var menu_sub: Label
+var spawn_row: Label
 var level_list: VBoxContainer
 var banner_label: Label
 
@@ -43,6 +47,34 @@ func _ready() -> void:
 	coin_label.offset_top = 28.0
 	coin_label.offset_bottom = 120.0
 	coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+	# held-powerup readout under the mana counter. The HUD layer provably
+	# renders on every machine (score/mana/float-texts do), so a held
+	# shield or double jump is always announced here, whatever happens to
+	# the world-space aura.
+	shield_chip = _label(40, Color("b98cff"))
+	shield_chip.text = "SHIELD"
+	root.add_child(shield_chip)
+	shield_chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	shield_chip.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	shield_chip.offset_left = -560.0
+	shield_chip.offset_right = -48.0
+	shield_chip.offset_top = 122.0
+	shield_chip.offset_bottom = 172.0
+	shield_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	shield_chip.visible = false
+
+	star_chip = _label(40, Color("ffd75e"))
+	star_chip.text = "DOUBLE JUMP"
+	root.add_child(star_chip)
+	star_chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	star_chip.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	star_chip.offset_left = -560.0
+	star_chip.offset_right = -48.0
+	star_chip.offset_top = 172.0
+	star_chip.offset_bottom = 222.0
+	star_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	star_chip.visible = false
 
 	hint_label = _label(40, Color(1, 1, 1, 0.9))
 	hint_label.text = "Tap LEFT of your wizard to JUMP  •  Tap RIGHT to BUILD (1 mana)"
@@ -116,6 +148,26 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key and key.pressed and not key.echo \
+			and key.keycode == KEY_U and key.shift_pressed:
+		# SHIFT+U (dev cheat): every level unlocks as a starting point
+		Levels.unlock(Levels.count() - 1)
+		show_level_banner("ALL LEVELS UNLOCKED")
+		if menu_root.visible:
+			show_menu(Levels.load_unlocked())
+		get_viewport().set_input_as_handled()
+		return
+	if key and key.pressed and not key.echo and menu_root.visible \
+			and (key.keycode == KEY_UP or key.keycode == KEY_DOWN):
+		# dev aid: arrows on the menu set the late-spawn offset (SHIFT ×100)
+		var step := 100.0 if key.shift_pressed else 25.0
+		if key.keycode == KEY_DOWN:
+			step = -step
+		Levels.debug_spawn_m = clampf(Levels.debug_spawn_m + step, 0.0, 2000.0)
+		_update_spawn_row()
+		get_viewport().set_input_as_handled()
+		return
 	if menu_root.visible:
 		return  # the menu owns the screen; only its buttons act
 	if event is InputEventKey and event.pressed and not event.echo \
@@ -162,15 +214,30 @@ func _build_menu(root: Control) -> void:
 	title.offset_bottom = 170.0
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	var sub := _label(40, Color(1, 1, 1, 0.85))
-	sub.text = "Choose your level"
-	sub.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	menu_root.add_child(sub)
-	sub.offset_left = -700.0
-	sub.offset_right = 700.0
-	sub.offset_top = 180.0
-	sub.offset_bottom = 240.0
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	menu_sub = _label(40, Color(1, 1, 1, 0.85))
+	menu_sub.text = "Choose your level"
+	menu_sub.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	menu_root.add_child(menu_sub)
+	menu_sub.offset_left = -700.0
+	menu_sub.offset_right = 700.0
+	menu_sub.offset_top = 180.0
+	menu_sub.offset_bottom = 240.0
+	menu_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# dev row: hover it and scroll (or press ↑/↓ anywhere on the menu) to
+	# set a late-spawn offset; SHIFT steps by 100 m. mouse_filter STOP so
+	# this one label hears the wheel itself.
+	spawn_row = _label(34, Color("b98cff"))
+	spawn_row.mouse_filter = Control.MOUSE_FILTER_STOP
+	spawn_row.gui_input.connect(_spawn_row_input)
+	spawn_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	menu_root.add_child(spawn_row)
+	spawn_row.offset_left = -700.0
+	spawn_row.offset_right = 700.0
+	spawn_row.offset_top = 244.0
+	spawn_row.offset_bottom = 296.0
+	spawn_row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_update_spawn_row()
 
 	level_list = VBoxContainer.new()
 	level_list.add_theme_constant_override("separation", 10)
@@ -180,7 +247,7 @@ func _build_menu(root: Control) -> void:
 	level_list.grow_vertical = Control.GROW_DIRECTION_END
 	level_list.offset_left = -430.0
 	level_list.offset_right = 430.0
-	level_list.offset_top = 270.0
+	level_list.offset_top = 310.0
 
 
 ## (Re)build the level buttons for the current unlock state and show the menu.
@@ -207,6 +274,26 @@ func show_menu(unlocked: int) -> void:
 		level_list.add_child(b)
 	menu_root.visible = true
 	pause_button.visible = false
+	_update_spawn_row()
+
+
+## Wheel over the LATE SPAWN row adjusts the offset; SHIFT steps by 100 m.
+func _spawn_row_input(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	if mb == null or not mb.pressed:
+		return
+	var step := 100.0 if mb.shift_pressed else 25.0
+	if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		step = -step
+	elif mb.button_index != MOUSE_BUTTON_WHEEL_UP:
+		return
+	Levels.debug_spawn_m = clampf(Levels.debug_spawn_m + step, 0.0, 2000.0)
+	_update_spawn_row()
+
+
+func _update_spawn_row() -> void:
+	spawn_row.text = "LATE SPAWN  +%d m     scroll here / ↑ ↓  ·  SHIFT ×100" \
+			% int(Levels.debug_spawn_m)
 
 
 func hide_menu() -> void:
@@ -293,6 +380,11 @@ func update_score(m: int) -> void:
 
 func update_coins(n: int) -> void:
 	coin_label.text = "MANA " + str(n)
+
+
+func update_powerups(sh: bool, dj: bool) -> void:
+	shield_chip.visible = sh
+	star_chip.visible = dj
 
 
 func flash_no_mana() -> void:

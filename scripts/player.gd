@@ -30,6 +30,7 @@ var stomp_jump := false  # stomping an enemy refreshes one jump until landing
 var gravity_dir := 1.0  # FLIPSIDE: -1 runs the ceiling; +1 the floor
 var flip_cooldown := 0.0
 var flip_buffer := 0.0  # taps buffer like jumps: a tap just before landing sticks
+var aura: Node2D  # held-powerup indicators, drawn on their own child (see below)
 
 
 func _init() -> void:
@@ -40,11 +41,21 @@ func _init() -> void:
 	rect.size = Vector2(BODY_W, BODY_H)
 	cs.shape = rect
 	add_child(cs)
+	# Powerup indicators live on a dedicated child in the float-text z-layer
+	# (which provably renders above everything world-side). They were drawn
+	# inside the player's own _draw() before, and on Neven's machine those
+	# extra commands never showed while the sprite itself did.
+	aura = Node2D.new()
+	aura.z_index = 40
+	aura.draw.connect(_draw_aura)
+	add_child(aura)
 
 
 func _physics_process(delta: float) -> void:
 	time_alive += delta
 	queue_redraw()
+	aura.visible = not dead and (shielded or double_jumps > 0)
+	aura.queue_redraw()
 
 	if dead:
 		velocity.y += GRAVITY * delta
@@ -165,15 +176,25 @@ func _draw() -> void:
 		var step := sin(time_alive * 20.0)
 		draw_rect(Rect2(-16 + step * 5.0, 38, 12, 6), Color("2f2650"))
 		draw_rect(Rect2(6 - step * 5.0, 38, 12, 6), Color("2f2650"))
-	# shield bubble: a violet ring while the one-hit protection is held
+
+
+## Held-powerup visuals, drawn on the AURA child (z 40, the float-text
+## layer): the shield's light-violet dome and the Star of Levity's three
+## orbiting gold circles.
+func _draw_aura() -> void:
+	if gravity_dir < 0.0:
+		aura.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, -1.0))
 	if shielded:
-		draw_circle(Vector2(0, -8), 54.0, Color(0.6, 0.4, 1.0, 0.12))
-		draw_arc(Vector2(0, -8), 54.0, 0.0, TAU, 40,
-				Color(0.73, 0.55, 1.0, 0.6 + 0.2 * sin(time_alive * 6.0)), 4.0)
-	# Star of Levity charge: gold sparkles orbit while a double jump is stored
+		var pulse := 0.5 + 0.5 * sin(time_alive * 6.0)
+		aura.draw_circle(Vector2(0, -8), 62.0, Color(0.65, 0.48, 1.0, 0.22 + 0.08 * pulse))
+		aura.draw_arc(Vector2(0, -8), 62.0, 0.0, TAU, 48,
+				Color(0.8, 0.62, 1.0, 0.85 + 0.15 * pulse), 7.0)
+		aura.draw_arc(Vector2(0, -8), 51.0, 0.0, TAU, 48,
+				Color(0.92, 0.84, 1.0, 0.3 + 0.3 * pulse), 3.0)
 	if double_jumps > 0:
 		for i in range(3):
 			var a := time_alive * 3.0 + TAU * float(i) / 3.0
-			var sp := Vector2(cos(a) * 44.0, sin(a) * 30.0 - 8.0)
-			draw_circle(sp, 4.0, Color(1.0, 0.85, 0.35, 0.9))
-			draw_circle(sp, 2.0, Color(1.0, 0.97, 0.8, 0.95))
+			var sp := Vector2(cos(a) * 52.0, sin(a) * 36.0 - 8.0)
+			aura.draw_circle(sp, 13.0, Color(1.0, 0.85, 0.35, 0.35))
+			aura.draw_circle(sp, 8.0, Color(1.0, 0.85, 0.35, 0.95))
+			aura.draw_circle(sp, 4.0, Color(1.0, 0.97, 0.8, 1.0))

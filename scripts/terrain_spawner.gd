@@ -107,6 +107,11 @@ var flip_strip_start := 0.0  # left edge of the last chain strip placed
 # when it reaches 0 the next chunk is a void crossing
 var spring_deck_left := 3
 
+# FOUNDATIONS: true once the first blob has been placed this run — the
+# shield orb only spawns behind it (the counter must never precede the
+# threat it answers; the orb means nothing before a blob has been met)
+var enemy_seen := false
+
 
 func _ready() -> void:
 	rng.randomize()
@@ -153,11 +158,25 @@ func _spawn_chunk() -> Dictionary:
 		return _spawn_bridge_chunk(d, v, budget)
 	if lv == Levels.FLIPSIDE:
 		return _spawn_flip_chunk(d, v)
+	if lv == Levels.BROS:
+		return _spawn_bros_chunk(d, v)
 
-	_update_climb_state(d)
+	# wind-down (standing rule: gentle hand-offs on BOTH edges): the last
+	# meters of every standard-generator band drop megas, enemies and climb
+	# waves and return to calm plain hops, so the next level's teach-in is
+	# entered composed — the old FOUNDATIONS ended slamming a swarm straight
+	# into the SPRINGS boundary
+	var wind: bool = lv + 1 < Levels.count() \
+			and Levels.start_m(lv + 1) - d <= WIND_DOWN_M
+	if wind:
+		climb_dir = 0
+		climb_steps_left = 0
+	else:
+		_update_climb_state(d)
 
 	var teach := _is_teach(d)
-	var mega: bool = not teach and climb_dir == 0 and d >= PHASE_BUILD \
+	var calm := teach or wind
+	var mega: bool = not calm and climb_dir == 0 and d >= PHASE_BUILD \
 			and (force_mega or rng.randf() < minf(MEGA_CHANCE_BASE + 0.15 * t, MEGA_CHANCE_MAX))
 	force_mega = false
 	var gap: float
@@ -181,8 +200,9 @@ func _spawn_chunk() -> Dictionary:
 		dy = rng.randf_range(-40.0, 160.0)
 		if d >= PHASE_SWARM and rng.randf() < DOUBLE_MEGA_CHANCE:
 			force_mega = true
-	elif teach:
-		# teach-in: easy gaps, wide decks, near-flat — room to meet the twist
+	elif calm:
+		# teach-in / wind-down: easy gaps, wide decks, near-flat — room to
+		# meet the twist (entering) or to breathe before the next one (leaving)
 		gap = rng.randf_range(GAP_MIN_FRAC * v, 0.44 * v)
 		w = rng.randf_range(700.0, 950.0)
 		dy = rng.randf_range(-60.0, 60.0)
@@ -205,10 +225,19 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
 		used += 1
 
+	# UMBRA: a lit fragment at the START of most decks — the beacon marks
+	# where footing begins, and the richer income funds the lantern-builds
+	# that sight demands (Neven: the dark band starved and killed; light
+	# must be affordable). Rolled before enemies so light wins the budget.
+	if lv == Levels.UMBRA and used < budget and rng.randf() < 0.9:
+		_place_coin(Vector2(x + 90.0, top_y - 60.0))
+		used += 1
+
 	# enemies (never on climb stairs — those are about building — and never
 	# in a teach-in stretch)
+	var enemy_before := enemy_seen  # the shield gate reads the PRE-chunk state
 	var enemies := 0
-	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not teach:
+	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not calm:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
 		if rng.randf() < chance:
 			enemies = 1
@@ -233,13 +262,24 @@ func _spawn_chunk() -> Dictionary:
 		b.speed = espeed
 		add_child(b)
 	used += enemies
+	if enemies > 0:
+		enemy_seen = true
 
 	# at most one crystal on the chunk itself; climb steps pay out more
-	# reliably so stairs stay affordable
+	# reliably so stairs stay affordable. UMBRA runs rich: mana is sight.
 	var mana_chance := MANA_CHANCE_CLIMB if climb_dir != 0 else MANA_CHANCE
+	if lv == Levels.UMBRA:
+		mana_chance = 0.65
 	if used < budget and rng.randf() < mana_chance:
-		var coin_y := top_y - 60.0 if rng.randf() < 0.7 else top_y - 250.0
-		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
+		if lv == Levels.UMBRA:
+			# route light: the second fragment sits mid/far deck at running
+			# height, never stacked over (or floating above) the deck-start
+			# beacon — two lit points on one deck must read as "run on",
+			# not as a confusing cluster at the left edge (Neven)
+			_place_coin(Vector2(x + rng.randf_range(w * 0.5, w - 80.0), top_y - 60.0))
+		else:
+			var coin_y := top_y - 60.0 if rng.randf() < 0.7 else top_y - 250.0
+			_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
 		used += 1
 
 	# rare Star of Levity: a stored double jump. Hung over the SAFE middle of
@@ -254,8 +294,9 @@ func _spawn_chunk() -> Dictionary:
 
 	# purple shield orb: FOUNDATIONS only — one forgiven blob mistake in the
 	# band that teaches blobs. Mid-deck like the star, same entity budget.
+	# Gated on a blob already standing EARLIER in the run, never before.
 	var shields := 0
-	if lv == 0 and d >= PHASE_ENEMY and used < budget and stars == 0 \
+	if lv == 0 and enemy_before and used < budget and stars == 0 \
 			and rng.randf() < 0.07:
 		_place_shield(Vector2(x + rng.randf_range(w * 0.3, w * 0.7), top_y - 150.0))
 		used += 1
@@ -374,9 +415,12 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 		return _spawn_flip_outro(v)
 	# opening runway: one continuous plain floor — time to read the
 	# FLIPSIDE banner before the first flip (Neven landed out of BRIDGES
-	# straight into a flip prompt with no time to react)
+	# straight into a flip prompt with no time to react).
+	# EXACTLY at last_top_y: runway strips overlap what came before, and
+	# any height drift inside that overlap is a lip that wedges (or drops)
+	# the wizard right at the boundary — the step bug Neven hit.
 	if d - Levels.start_m(Levels.FLIPSIDE) < RUNWAY_M:
-		var run_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 800.0, 940.0)
+		var run_y := clampf(last_top_y, 800.0, 920.0)
 		var run_start := next_x - 0.3 * v
 		var run_w := (next_x - run_start) + rng.randf_range(1.0 * v, 1.4 * v)
 		_place_chunk(run_start, run_y, run_w)
@@ -426,23 +470,33 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var w := rng.randf_range(1.1 * v, 1.4 * v) if teach else rng.randf_range(0.75 * v, 1.1 * v)
 	var start := next_x - ov
 	flip_strip_start = start
+	var used := 0
+	if rng.randf() < 0.6:
+		# crystals ride the FLIP TRANSIT itself: sampled from the corridor-
+		# crossing free-fall arc (gravity 3300 from rest), fired from MID
+		# window — chasing the mana IS taking the flip on time. Random
+		# placements read as noise in this level (Neven), and the trail
+		# starts 129 px off the surface (tau 0.28): a fragment hugging a
+		# strip's edge baits the player toward the drop-off (Neven again).
+		var x0 := start + 0.45 * ov
+		for tau: float in [0.28, 0.42, 0.54]:
+			var fall := 1650.0 * tau * tau
+			var fy := (floor_y - 20.0 - fall) if flip_on_floor \
+					else (floor_y - FLIP_CORRIDOR + 20.0 + fall)
+			_place_coin(Vector2(x0 + v * tau, fy))
+		used = 3
 	if flip_on_floor:
 		_place_ceiling(start, floor_y - FLIP_CORRIDOR, w)
 	else:
 		_place_chunk(start, floor_y, w)
 		last_top_y = floor_y
 	flip_on_floor = not flip_on_floor
-	var used := 0
-	if rng.randf() < 0.5:
-		# crystal mid-corridor over the flip window: timing is the detour
-		_place_coin(Vector2(start + ov * 0.5, floor_y - FLIP_CORRIDOR * 0.5))
-		used = 1
 	next_x = start + w
 	return {
 		"gap": -ov, "width": w, "top_y": floor_y, "mega": false,
 		"enemies": 0, "entities": used, "climb": 0,
 		"void": false, "pillar": false, "flip": true, "dead": false,
-		"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
+		"arc": used == 3, "overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
 	}
 
 
@@ -475,23 +529,30 @@ func _spawn_flip_outro(v: float) -> Dictionary:
 	}
 
 
-## BLOB BRIDGES level, round 2 (Neven: too monotone, and give me CHAINS).
-## Three gap kinds now share the band:
-##   blob  (~62%) — 1 blob mid-gap, or 2 in a wider gap (0.42/0.72 in),
-##                  all at ONE shared stomp height (deck - 90)
-##   plain (~18%) — a short blob-free breather, plain jump
-##   bmega (~20%) — a wide blob-free gap that demands a built platform
-## Decks are narrow (210-290) and FLAT (drift ±30) so the flow chain works:
-## stomp bounce (-1000) plus the refreshed tap-jump at bounce apex reaches
-## ~1.1*v — enough to carry from a late blob across the deck onto the next
-## gap's blob without ever touching down.
+## BLOB BRIDGES level, round 3 (Neven: bring back "every gap is a blob
+## bridge", and the flow must never need a frame-perfect mid-air tap).
+## Every non-wind-down gap carries 1 or 2 blobs at the shared stomp height
+## (deck - 90, so the crown a stomp lands on sits ~122 px above the deck).
+## The whole layout is derived from the bounce math (STOMP_BOUNCE -1000,
+## gravity 3300), so the chain is automatic:
+##   - a ground jump falls through crown height ~0.58*v after the tap, so
+##     the FIRST blob sits exactly 0.5*v past the takeoff edge: tap AT the
+##     edge and the stomp lands (the ±95 px aim assist covers the rest);
+##   - a passive bounce between same-height crowns hangs 0.606 s, so a
+##     double's second blob sits 0.6*v after the first: stomp one,
+##     automatically stomp two — no tap in between (round 2 spaced them
+##     ~0.35*v apart, which is why Neven flew clean OVER the second blob);
+##   - the bounce off the LAST blob falls back to deck level in 0.71 s, so
+##     the far edge sits 0.50-0.58*v past it: the chain always lands INSIDE
+##     the next deck (round 2 often overshot it — the lost flow).
 func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	# wind-down: the last stretch before FLIPSIDE goes blob-free with plain
 	# jumps and wide decks — the corridor is entered calm, not mid-panic
 	if Levels.start_m(Levels.FLIPSIDE) - d <= WIND_DOWN_M:
 		var out_gap := rng.randf_range(0.38, 0.48) * v
 		var out_w := rng.randf_range(500.0, 700.0)
-		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
+		# 800+ matches the runway's clamp band, so the hand-off can't step
+		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 800.0, 920.0)
 		var out_x := next_x + out_gap
 		_place_chunk(out_x, out_y, out_w)
 		var out_used := 0
@@ -507,59 +568,32 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 			"void": false, "pillar": false, "bridge": true, "bkind": "out",
 			"stars": 0, "rise": out_rise, "speed": v,
 		}
-	# teach-in: single blobs, the narrowest gaps, wide pillars
+	# teach-in: singles only and wide decks; the full band mixes in doubles
 	var teach := _is_teach(d)
 	var top_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
-	var kind := "blob"
-	if not teach:
-		var r := rng.randf()
-		if r < 0.18:
-			kind = "plain"
-		elif r < 0.38:
-			kind = "bmega"
-	var gap: float
-	var w: float
-	var blobs := 0
-	if kind == "plain":
-		gap = rng.randf_range(0.42, 0.52) * v
-		w = rng.randf_range(240.0, 320.0)
-	elif kind == "bmega":
-		gap = rng.randf_range(1.1, 1.35) * v
-		w = rng.randf_range(280.0, 360.0)
-	elif teach:
-		gap = rng.randf_range(0.7, 0.85) * v
-		w = rng.randf_range(400.0, 500.0)
-		blobs = 1
-	else:
-		var two := rng.randf() < 0.45
-		gap = (rng.randf_range(1.05, 1.3) if two else rng.randf_range(0.7, 0.9)) * v
-		w = rng.randf_range(210.0, 290.0)
-		blobs = 2 if two else 1
-	blobs = mini(blobs, budget)
+	var blob_xs: Array = [0.5 * v]  # px past the takeoff edge, see above
+	if not teach and rng.randf() < 0.45:
+		blob_xs.append(0.5 * v + 0.6 * v)
+	# the far edge lands the passive bounce mid-deck; doubles trim the top
+	# of the range so the fallback build (1.418*v + 240) still bridges them
+	var last_bx: float = blob_xs[blob_xs.size() - 1]
+	var gap: float = last_bx \
+			+ rng.randf_range(0.50, 0.58 if blob_xs.size() == 1 else 0.56) * v
+	var w := rng.randf_range(400.0, 500.0) if teach else rng.randf_range(240.0, 290.0)
+	var blobs := mini(blob_xs.size(), budget)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
 
-	# singles hang at the full jump's descent point; doubles one bounce
-	# apart, the second near the far edge so the chain can carry onward
 	var deck_y := minf(last_top_y, top_y)
-	var fracs: Array = []
-	if blobs == 1:
-		fracs = [rng.randf_range(0.48, 0.56)]
-	elif blobs == 2:
-		fracs = [0.42, 0.72]
-	for f in fracs:
-		var bx: float = next_x + gap * f
+	for i in range(blobs):
+		var bx: float = next_x + blob_xs[i]
 		var b := SpikeBlob.new(bx - 40.0, bx + 40.0)
 		b.position = Vector2(bx, deck_y - 90.0)
 		b.speed = enemy_speed_for(d)
 		add_child(b)
 
 	var used := blobs
-	if kind == "bmega":
-		# the build toll pays out over the emptiness, like FOUNDATIONS megas
-		_place_coin(Vector2(next_x + gap * 0.5, deck_y - 190.0))
-		used += 1
-	elif used < budget and rng.randf() < 0.5:
+	if used < budget and rng.randf() < 0.5:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
 		used += 1
 
@@ -569,7 +603,92 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": false,
 		"enemies": blobs, "entities": used, "climb": 0,
-		"void": false, "pillar": false, "bridge": true, "bkind": kind,
+		"void": false, "pillar": false, "bridge": true, "bkind": "blob",
+		"blobs": blobs, "b1": blob_xs[0],
+		"b2": blob_xs[1] if blobs == 2 else 0.0,
+		"stars": 0, "rise": rise, "speed": v,
+	}
+
+
+## SPELLBROS level (Neven's spec, round 2): the crimson brother overhead
+## burns the blob ahead for 1 mana each, so the band is LONG GAUNTLET
+## decks lined with blobs, split by blob-free mega crossings that drain
+## the pool the other way (a built platform). The gauntlet geometry is
+## the same chain math as BLOB BRIDGES, so a dry pool is stomped through:
+##   first blob 0.65*v past the takeoff edge (a deck-level crown sits
+##     ~62 px up: the tap-at-the-edge jump falls through it there);
+##   blobs 0.6*v apart — one passive bounce, auto-chain;
+##   tail 0.72-0.85*v — the last bounce (0.663*v of carry) lands ON deck.
+## Fragment arcs hover at the bounce-apex midpoints (deck - 200), some
+## orange +3: farming the line by hand is how the burn pool refills.
+func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
+	# wind-down into THE VOID: plain calm hops, nothing left to burn
+	if PHASE_VOID - d <= WIND_DOWN_M:
+		var out_gap := rng.randf_range(0.36, 0.46) * v
+		var out_w := rng.randf_range(500.0, 700.0)
+		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
+		var out_x := next_x + out_gap
+		_place_chunk(out_x, out_y, out_w)
+		var out_used := 0
+		if rng.randf() < 0.4:
+			_place_coin(Vector2(out_x + rng.randf_range(80.0, out_w - 80.0), out_y - 60.0))
+			out_used = 1
+		var out_rise := maxf(0.0, last_top_y - out_y)
+		next_x = out_x + out_w
+		last_top_y = out_y
+		return {
+			"gap": out_gap, "width": out_w, "top_y": out_y, "mega": false,
+			"enemies": 0, "entities": out_used, "climb": 0,
+			"void": false, "pillar": false, "bros": true, "gkind": "out",
+			"blobs": 0, "stars": 0, "rise": out_rise, "speed": v,
+		}
+	var teach := _is_teach(d)
+	var top_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 700.0, 920.0)
+	if not teach and rng.randf() < 0.3:
+		# blob-free crossing: the pool's other drain is a built platform
+		var mgap := rng.randf_range(0.95, 1.25) * v
+		var mw := rng.randf_range(300.0, 400.0)
+		var mx := next_x + mgap
+		_place_chunk(mx, top_y, mw)
+		_place_coin(Vector2(next_x + mgap * 0.5, minf(last_top_y, top_y) - 190.0))
+		var mrise := maxf(0.0, last_top_y - top_y)
+		next_x = mx + mw
+		last_top_y = top_y
+		return {
+			"gap": mgap, "width": mw, "top_y": top_y, "mega": false,
+			"enemies": 0, "entities": 1, "climb": 0,
+			"void": false, "pillar": false, "bros": true, "gkind": "gmega",
+			"blobs": 0, "stars": 0, "rise": mrise, "speed": v,
+		}
+	# gauntlet deck: the blob line, teach-ins keep it short
+	var k := 2 if teach else 2 + rng.randi() % 3
+	var gap := rng.randf_range(0.40, 0.52) * v
+	var lead := 0.65 * v - gap
+	var tail := rng.randf_range(0.72, 0.85) * v
+	var w := lead + 0.6 * v * float(k - 1) + tail
+	var x := next_x + gap
+	_place_chunk(x, top_y, w)
+	var espeed := enemy_speed_for(d)
+	for i in range(k):
+		var bx: float = x + lead + 0.6 * v * float(i)
+		var b := SpikeBlob.new(bx - 40.0, bx + 40.0)
+		b.position = Vector2(bx, top_y - 30.0)
+		b.speed = espeed
+		add_child(b)
+	var coins := 0
+	for i in range(k - 1):
+		if rng.randf() < 0.65:
+			var amt := 3 if rng.randf() < 0.18 else 1
+			_place_coin(Vector2(x + lead + 0.6 * v * (float(i) + 0.5), top_y - 200.0), amt)
+			coins += 1
+	var rise := maxf(0.0, last_top_y - top_y)
+	next_x = x + w
+	last_top_y = top_y
+	return {
+		"gap": gap, "width": w, "top_y": top_y, "mega": false,
+		"enemies": k, "entities": k + coins, "climb": 0,
+		"void": false, "pillar": false, "bros": true, "gkind": "gaunt",
+		"blobs": k, "b1": gap + lead, "bsp": 0.6 * v, "tail": tail,
 		"stars": 0, "rise": rise, "speed": v,
 	}
 

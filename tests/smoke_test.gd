@@ -71,6 +71,40 @@ func _run_tests() -> void:
 	print("TEST levels: map_ok=%s persist_ok=%s (expect true true)" % [map_ok, persist_ok])
 	_check(map_ok and persist_ok, "levels api")
 
+	# debug late spawn: the menu's ↑/↓ offset credits meters past the level
+	# start (no awaits here — distance_m must be read before physics runs)
+	Levels.debug_spawn_m = 250.0
+	main.begin_run(0)
+	var dbg_mid: bool = main.distance_m == 250.0 and main.start_offset_m == 250.0 \
+			and main.coins == 2 and main.cur_level == 0
+	# a deep offset lands in a LATER level: that level's rules must govern
+	Levels.debug_spawn_m = 1100.0
+	main.begin_run(0)
+	var dbg_deep: bool = main.distance_m == 1100.0 and main.cur_level == Levels.FLIPSIDE \
+			and main.coins == 2 + Levels.FLIPSIDE
+	Levels.debug_spawn_m = 0.0
+	main.begin_run(0)
+	var dbg_zero: bool = main.distance_m == 0.0 and main.coins == main.START_COINS \
+			and main.cur_level == 0
+	Main.auto_start_level = -1
+	main.hud.show_menu(0)
+	var evk := InputEventKey.new()
+	evk.keycode = KEY_UP
+	evk.pressed = true
+	main.hud._unhandled_input(evk)
+	var key_step: bool = Levels.debug_spawn_m == 25.0
+	var evw := InputEventMouseButton.new()
+	evw.button_index = MOUSE_BUTTON_WHEEL_UP
+	evw.pressed = true
+	evw.shift_pressed = true
+	main.hud._spawn_row_input(evw)
+	var wheel_step: bool = Levels.debug_spawn_m == 125.0
+	main.hud.hide_menu()
+	Levels.debug_spawn_m = 0.0
+	print("TEST debugspawn: mid=%s deep=%s zero=%s key=%s wheel=%s (expect all true)" % [
+		dbg_mid, dbg_deep, dbg_zero, key_step, wheel_step])
+	_check(dbg_mid and dbg_deep and dbg_zero and key_step and wheel_step, "debug late spawn")
+
 	# build a platform ahead of the wizard (seed mana; the run now starts at 0)
 	main.coins = 3
 	var coins_before: int = main.coins
@@ -112,6 +146,34 @@ func _run_tests() -> void:
 	p.global_position.y = y_saved
 	print("TEST camahead: target flat %.0f, low pillar ahead %.0f (expect >= 200 px lower)" % [t_flat, t_low])
 	_check(t_low - t_flat >= 200.0, "camera pillar lookdown")
+
+	# a hard fall (past flat-jump landing speed) forces the frame down too
+	await create_timer(0.05).timeout  # let the probe chunk above actually free
+	p.global_position.y = 600.0
+	p.velocity.y = 0.0
+	var t_still: float = main.camera_target_y()
+	p.velocity.y = 2200.0
+	var t_fall: float = main.camera_target_y()
+	p.velocity.y = 0.0
+	p.global_position.y = y_saved
+	print("TEST camfall: still %.0f falling %.0f (expect >= 400 px lower)" % [t_still, t_fall])
+	_check(t_fall - t_still >= 400.0, "camera fall lookdown")
+
+	# FLIPSIDE frames the corridor: floor-running looks up at the ceiling,
+	# ceiling-running looks down at the floor — the opposite surface (and
+	# any gap coming in it) must stay on screen
+	main.distance_m = 950.0
+	var y_keep: float = p.global_position.y
+	p.global_position.y = 880.0
+	p.gravity_dir = 1.0
+	var t_floor: float = main.camera_target_y()
+	p.gravity_dir = -1.0
+	var t_ceil: float = main.camera_target_y()
+	p.gravity_dir = 1.0
+	p.global_position.y = y_keep
+	main.distance_m = 20.0
+	print("TEST camflip: floor %.0f (expect 640) ceiling %.0f (expect 1000)" % [t_floor, t_ceil])
+	_check(t_floor == 640.0 and t_ceil == 1000.0, "flipside corridor framing")
 
 	# no-mana path must refuse to build
 	main.coins = 0
@@ -229,6 +291,27 @@ func _run_tests() -> void:
 	blob3.queue_free()
 	p.velocity = Vector2.ZERO
 
+	# the shield orb never precedes the first blob: the counter must come
+	# after the threat it answers
+	main.spawner.enemy_seen = false
+	main.spawner.climb_dir = 0
+	main.spawner.climb_steps_left = 0
+	main.spawner.flat_chunks_since_wave = 99
+	main.spawner.force_mega = false
+	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
+	var first_enemy := -1
+	var first_shield := -1
+	for i in range(300):
+		main.spawner.next_x = 80.0 * 100.0 + main.start_x
+		var sc: Dictionary = main.spawner._spawn_chunk()
+		if first_enemy == -1 and sc["enemies"] > 0:
+			first_enemy = i
+		if first_shield == -1 and sc["shields"] > 0:
+			first_shield = i
+	print("TEST shieldorder: first_enemy=%d first_shield=%d (expect both >= 0, enemy strictly first)" % [
+		first_enemy, first_shield])
+	_check(first_enemy >= 0 and first_shield > first_enemy, "shield only after first enemy")
+
 	# park the wizard on a fresh platform so the star test starts grounded
 	main.coins = 5
 	main.build_cooldown = 0.0
@@ -253,6 +336,19 @@ func _run_tests() -> void:
 		granted, airborne, p.velocity.y, p.double_jumps])
 	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.double_jumps == 0,
 			"star of levity")
+
+	# a tap buffered BEFORE the pickup must not instantly eat the charge —
+	# the reason held orbs were never seen (star sits at jump-apex height,
+	# so pickup is always mid-air, where a stale buffer spends same-frame)
+	var star2 := StarPickup.new()
+	star2.global_position = p.global_position
+	main.add_child(star2)
+	p.jump_buffer = 0.1  # tapped moments before touching the star
+	star2._on_body_entered(p)
+	print("TEST starbuffer: jumps=%d buffer=%.2f (expect 1, <= 0)" % [
+		p.double_jumps, p.jump_buffer])
+	_check(p.double_jumps == 1 and p.jump_buffer <= 0.0, "star survives a stale tap")
+	p.double_jumps = 0
 
 	# orange fragment: a single crystal worth +3 mana
 	main.coins = 0
@@ -300,6 +396,35 @@ func _run_tests() -> void:
 	p.global_position = Vector2(p.global_position.x + 200.0, 640.0)
 	p.velocity = Vector2.ZERO
 	await create_timer(0.1).timeout
+
+	# banner lead: SPRINGS is announced a short beat before 300 m, not a
+	# whole wind-down early (Neven: 45 m ahead read as "too early")
+	main.announced_level = 0
+	main.hud.banner_label.text = ""
+	main.distance_m = Levels.start_m(Levels.SPRINGS) - main.BANNER_LEAD_M - 10.0
+	await create_timer(0.05).timeout
+	var banner_quiet: bool = main.hud.banner_label.text == ""
+	main.distance_m = Levels.start_m(Levels.SPRINGS) - main.BANNER_LEAD_M + 2.0
+	await create_timer(0.05).timeout
+	print("TEST bannerlead: quiet_before=%s text=\"%s\" (expect true, LEVEL 2: SPRINGS)" % [
+		banner_quiet, main.hud.banner_label.text])
+	_check(banner_quiet and main.hud.banner_label.text == "LEVEL 2: SPRINGS",
+			"banner fires on its short lead")
+	main.distance_m = 20.0
+
+	# FLIPSIDE banner: quiet through the bridges wind-down, fired ON the
+	# boundary — the runway underneath is the reading room
+	main.announced_level = 2
+	main.hud.banner_label.text = ""
+	main.distance_m = Levels.start_m(Levels.FLIPSIDE) - 5.0
+	await create_timer(0.05).timeout
+	var flip_quiet: bool = main.hud.banner_label.text == ""
+	main.distance_m = Levels.start_m(Levels.FLIPSIDE) + 1.0
+	await create_timer(0.05).timeout
+	print("TEST flipbanner: quiet_before=%s text=\"%s\" (expect true, LEVEL 4: FLIPSIDE)" % [
+		flip_quiet, main.hud.banner_label.text])
+	_check(flip_quiet and main.hud.banner_label.text == "LEVEL 4: FLIPSIDE",
+			"flipside banner on the runway")
 
 	# FLIPSIDE: buffered grounded flip, spam guard, solid builds
 	main.distance_m = 950.0
@@ -417,39 +542,44 @@ func _run_tests() -> void:
 				if cc is PointLight2D:
 					beacon = true
 			c.queue_free()
-	print("TEST umbra: dark=%s lantern=%s beacon=%s (expect all true)" % [
-		dark_ok, lantern_lit, beacon])
+	print("TEST umbra: dark=%s lantern=%s beacon=%s halo=%.2f (expect all true, halo > 3.4)" % [
+		dark_ok, lantern_lit, beacon, main.wizard_light.texture_scale])
 	_check(dark_ok and lantern_lit and beacon, "umbra darkness")
+	_check(main.wizard_light.texture_scale > 3.4, "umbra halo widened")
 
-	# SPELLBROS: the echo brother activates, mirrors, and banks crystals
+	# SPELLBROS: the crimson brother is a mana-fueled shield — a lethal
+	# touch is burned for 1 mana, a stomp costs nothing (it's income), and
+	# a dry pool leaves the touch lethal
 	main.distance_m = 1600.0
-	p.set_physics_process(false)  # hold the wizard still so the bro stays put
 	await create_timer(0.1).timeout
 	var bro_on: bool = main.bro.active and main.bro.visible
-	var coins_pre: int = main.coins
-	main.spawner._place_coin(main.bro.global_position)
-	await create_timer(0.15).timeout
-	p.set_physics_process(true)
-	print("TEST echobro: active=%s coins %d -> %d (expect +1, bro collected)" % [
-		bro_on, coins_pre, main.coins])
-	_check(bro_on and main.coins == coins_pre + 1, "echo bro")
-
-	# the bond, consequential: the bro intercepts one kill, then recharges
-	var gblob := SpikeBlob.new(0.0, 100.0)
-	gblob.global_position = p.global_position + Vector2(60.0, 0.0)
-	main.add_child(gblob)
+	main.coins = 2
+	main.hud.update_coins(main.coins)
+	var bblob := SpikeBlob.new(0.0, 100.0)
+	bblob.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(bblob)
 	p.velocity.y = 0.0
-	gblob._on_body_entered(p)
-	var guarded: bool = not p.dead and gblob.dying and main.bro.guard_cd > 0.0
-	var gblob2 := SpikeBlob.new(0.0, 100.0)
-	gblob2.global_position = p.global_position + Vector2(60.0, 0.0)
-	main.add_child(gblob2)
-	gblob2._on_body_entered(p)
-	print("TEST broguard: guarded=%s (expect true) recharging_lethal=%s (expect true)" % [
-		guarded, p.dead])
-	_check(guarded and p.dead, "echo bro guardian")
-	gblob.queue_free()
-	gblob2.queue_free()
+	bblob._on_body_entered(p)
+	var guarded: bool = not p.dead and bblob.dying and main.coins == 1
+	var sblob := SpikeBlob.new(0.0, 100.0)
+	sblob.global_position = p.global_position + Vector2(0.0, 60.0)
+	main.add_child(sblob)
+	p.velocity.y = 300.0  # falling onto it: a stomp, never a burn
+	sblob._on_body_entered(p)
+	var stomp_free: bool = not p.dead and sblob.dying and main.coins == 2
+	main.coins = 0
+	main.hud.update_coins(main.coins)
+	var dblob := SpikeBlob.new(0.0, 100.0)
+	dblob.global_position = p.global_position + Vector2(60.0, 0.0)
+	main.add_child(dblob)
+	p.velocity.y = 0.0
+	dblob._on_body_entered(p)
+	print("TEST spellbro: active=%s guarded=%s stomp_free=%s dry_lethal=%s (expect all true)" % [
+		bro_on, guarded, stomp_free, p.dead])
+	_check(bro_on and guarded and stomp_free and p.dead, "spellbro guards for mana")
+	bblob.queue_free()
+	sblob.queue_free()
+	dblob.queue_free()
 	p.dead = false
 	p.collision_mask = 1
 	p.rotation = 0.0
@@ -457,7 +587,42 @@ func _run_tests() -> void:
 	main.game_over = false
 	main.hud.over_root.visible = false
 	main.distance_m = 20.0
-	main.bro.active = false
+
+	# S / D dev keys grant the shield and the double jump on demand
+	p.shielded = false
+	p.double_jumps = 0
+	var evs := InputEventKey.new()
+	evs.keycode = KEY_S
+	evs.pressed = true
+	main._unhandled_input(evs)
+	var evd := InputEventKey.new()
+	evd.keycode = KEY_D
+	evd.pressed = true
+	main._unhandled_input(evd)
+	print("TEST devgrants: shield=%s jumps=%d (expect true 1)" % [p.shielded, p.double_jumps])
+	_check(p.shielded and p.double_jumps == 1, "S/D dev powerup grants")
+	# the held-powerup readout: the world-space aura child AND the HUD chips
+	# must both light up while a powerup is held, and clear when it's spent
+	await create_timer(0.05).timeout
+	var ind_on: bool = p.aura.visible and p.aura.z_index == 40 \
+			and main.hud.shield_chip.visible and main.hud.star_chip.visible
+	p.shielded = false
+	p.double_jumps = 0
+	await create_timer(0.05).timeout
+	var ind_off: bool = not p.aura.visible \
+			and not main.hud.shield_chip.visible and not main.hud.star_chip.visible
+	print("TEST powerupind: held=%s cleared=%s (expect true true)" % [ind_on, ind_off])
+	_check(ind_on and ind_off, "powerup indicators track the held state")
+
+	# SHIFT+U dev cheat: every level unlocks as a starting point
+	var evu := InputEventKey.new()
+	evu.keycode = KEY_U
+	evu.shift_pressed = true
+	evu.pressed = true
+	main.hud._unhandled_input(evu)
+	print("TEST unlockcheat: unlocked=%d (expect %d)" % [
+		Levels.load_unlocked(), Levels.count() - 1])
+	_check(Levels.load_unlocked() == Levels.count() - 1, "shift+U unlocks all")
 
 	# speed: flat before PHASE_SPEED, then ramps at SPEED_RAMP, capped
 	var s0: float = main.run_speed_for(TerrainSpawner.PHASE_SPEED - 10.0)
@@ -530,10 +695,11 @@ func _run_tests() -> void:
 			int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
-		# spring crossings (5-fragment arc trails) are exempt like the void:
-		# their trails ARE the pad economy, not chunk clutter
+		# spring crossings (5-fragment arc trails) and SPELLBROS gauntlets
+		# (blob lines + their fragment arcs) are exempt like the void:
+		# their trails ARE the economy, not chunk clutter
 		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) \
-				or s["voids"] > 0 or s["svoid"] > 0,
+				or s["voids"] > 0 or s["svoid"] > 0 or s["gaunt"] > 0,
 				"entity budget at d=%d" % int(d))
 	# level/phase-shape expectations, derived from the constants so they
 	# stay valid while tuning configs
@@ -548,10 +714,18 @@ func _run_tests() -> void:
 	# (enemies per ELIGIBLE chunk; climb waves carry none and dilute raw counts)
 	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
 	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
-	_check(mid["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
+	# star spawns are rare (~2% of eligible chunks): 80-chunk samples rolled
+	# zero once in ~10 runs, so this check gets its own 400-chunk probe
+	var starb := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 400)
+	_check(starb["stars"] > 0, "stars spawn after enemy phase")
 	# foundations climb waves (from PHASE_CLIMB, inside level 0)
 	var climbb := _probe(130.0, 80)
 	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
+	# FOUNDATIONS wind-down: the band's last meters are calm plain hops —
+	# no swarm slams into the SPRINGS teach-in
+	var windb := _probe(Levels.start_m(Levels.SPRINGS) - 20.0, 80)
+	_check(windb["mega"] == 0 and windb["enemies"] == 0 and windb["climbs"] == 0
+			and windb["bad"] == 0, "foundations wind-down calm")
 	# SPRINGS band, void-like: pillar diagonals, no enemies, pads affordable
 	var springb := _probe(Levels.start_m(Levels.SPRINGS) + 50.0, 80)
 	_check(springb["spring"] == 80 and springb["enemies"] == 0 and springb["mega"] == 0,
@@ -559,12 +733,13 @@ func _run_tests() -> void:
 	_check(springb["mana"] >= springb["builds"] * 0.8, "springs pad economy")
 	# the rhythm: easy deck sections split by void crossings (~1 in 3-5)
 	_check(springb["svoid"] > 8 and springb["svoid"] < 40, "springs deck/void rhythm")
-	# BLOB BRIDGES band: bridges throughout, blobs as stepping stones, plus
-	# blob-free variety (plain breathers and build-demanding megas)
+	# BLOB BRIDGES band: EVERY gap is a blob bridge (singles and doubles),
+	# and the chain geometry holds exactly — first blob one edge-jump out,
+	# doubles one passive bounce apart
 	var bridgeb := _probe(Levels.start_m(Levels.BRIDGES) + 50.0, 80)
-	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 40 and bridgeb["climbs"] == 0,
-			"blob bridges band")
-	_check(bridgeb["bplain"] > 0 and bridgeb["bmega"] > 0, "bridges variety")
+	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] > 80 and bridgeb["climbs"] == 0,
+			"blob bridges band: every gap a blob bridge, doubles present")
+	_check(bridgeb["b1err"] < 0.5 and bridgeb["bsperr"] < 0.5, "bridges flow geometry")
 	# bridges wind-down: the corridor is entered calm — no blobs at the end
 	var bridge_out := _probe(Levels.start_m(Levels.FLIPSIDE) - 20.0, 80)
 	_check(bridge_out["bridge"] == 80 and bridge_out["enemies"] == 0,
@@ -575,8 +750,23 @@ func _run_tests() -> void:
 	_check(flipb["dead"] > 0 and flipb["dead"] < 40, "flipside dead zones present but not dominant")
 	# dead zones must be affordable: crystals in the band outpay the builds
 	_check(flipb["mana"] >= flipb["builds"] * 0.8, "flipside build economy")
-	# UMBRA and SPELLBROS run the standard generator (their twists live in
-	# lighting and the echo bro); the band loop above already audits them
+	# and the crystals draw the flip line: transit-arc trails on most chains
+	_check(flipb["arc"] > 20, "flipside crystals ride the flip arcs")
+	# UMBRA runs the standard generator but RICH: deck-start beacons plus a
+	# raised crystal chance, because mana is sight there (Neven: it starved)
+	var umbrab := _probe(Levels.start_m(Levels.UMBRA) + 100.0, 80)
+	_check(umbrab["mana"] >= 0.8, "umbra runs rich in fragments")
+	# SPELLBROS: gauntlet decks dominate, mega crossings mix in, and the
+	# chain geometry is exact so a dry-mana gauntlet stays stompable
+	var brosb := _probe(Levels.start_m(Levels.BROS) + 50.0, 80)
+	_check(brosb["gaunt"] > 40 and brosb["gmega"] > 5, "spellbros band mix")
+	_check(brosb["enemies"] > 120 and brosb["b1err"] < 0.5 and brosb["bsperr"] < 0.5,
+			"spellbros gauntlet chains")
+	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
+	_check(teach_bros["gaunt"] == 80 and teach_bros["enemies"] == 160,
+			"spellbros teach-in: short gauntlets")
+	var bros_out := _probe(TerrainSpawner.PHASE_VOID - 20.0, 80)
+	_check(bros_out["enemies"] == 0 and bros_out["mega"] == 0, "spellbros wind-down calm")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 	# teach-ins: every level's first ~45 m is its mechanic in gentle form
@@ -586,10 +776,13 @@ func _run_tests() -> void:
 	var teach_bridge := _probe(Levels.start_m(Levels.BRIDGES) + 10.0, 80)
 	_check(teach_bridge["bridge"] == 80 and teach_bridge["enemies"] == 80,
 			"bridges teach-in: single blobs only")
-	# FLIPSIDE opening runway (first ~20 m): continuous plain floor
+	# FLIPSIDE opening runway (first ~20 m): continuous plain floor, and
+	# DEAD level — any height drift inside the overlapping strips is a lip
+	# that wedges or drops the wizard at the boundary
 	var runway := _probe(Levels.start_m(Levels.FLIPSIDE) + 10.0, 80)
 	_check(runway["flip"] == 80 and runway["dead"] == 0 and runway["min_top"] >= 800.0,
 			"flipside opening runway")
+	_check(runway["min_top"] == runway["max_top"], "flipside runway is step-free")
 	# then the teach-in proper: chain strips, no dead zones yet
 	var teach_flip := _probe(Levels.start_m(Levels.FLIPSIDE) + 30.0, 80)
 	_check(teach_flip["flip"] == 80 and teach_flip["dead"] == 0,
@@ -614,12 +807,14 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
+	main.spawner.enemy_seen = true  # probes sample mid-run behavior
 	main.spawner.flip_on_floor = true
 	main.spawner.flip_strip_start = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"dead": 0, "spring": 0, "svoid": 0, "bplain": 0, "bmega": 0,
-			"min_top": 9999.0, "bad": 0,
+			"dead": 0, "spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
+			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
+			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -652,11 +847,14 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["spring"] += 1
 		if s.get("svoid", false):
 			stats["svoid"] += 1
-		if s.get("bkind", "") == "plain":
-			stats["bplain"] += 1
-		if s.get("bkind", "") == "bmega":
-			stats["bmega"] += 1
+		if s.get("arc", false):
+			stats["arc"] += 1
+		if s.get("gkind", "") == "gaunt":
+			stats["gaunt"] += 1
+		elif s.get("gkind", "") == "gmega":
+			stats["gmega"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
+		stats["max_top"] = maxf(stats["max_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
 		span += s["gap"] + s["width"]
@@ -665,17 +863,44 @@ func _probe(d: float, n: int) -> Dictionary:
 		var one_build := 1.418 * v + 240.0  # jump + platform deck + jump
 		if s["void"]:
 			stats["builds"] += ceilf(s["gap"] / one_build)
+		elif s.get("bros", false):
+			if s.get("gkind", "") == "gmega":
+				# blob-free crossing: the build IS the crossing
+				stats["builds"] += 1.0
+				if s["gap"] > one_build:
+					stats["bad"] += 1
+			elif s["gap"] > 0.68 * v:
+				stats["bad"] += 1  # gauntlet entries / wind-down: plain jumps
+			if s.get("gkind", "") == "gaunt":
+				# the chain: first blob one edge-jump out (0.65*v to a
+				# deck-level crown), 0.6*v spacing (one passive bounce),
+				# and a tail that catches the last bounce's 0.663*v carry
+				stats["b1err"] = maxf(stats["b1err"], absf(s["b1"] - 0.65 * v))
+				stats["bsperr"] = maxf(stats["bsperr"], absf(s["bsp"] - 0.6 * v))
+				if s["tail"] < 0.71 * v or s["tail"] > 0.9 * v:
+					stats["bad"] += 1
 		elif s.get("bridge", false):
-			var bk: String = s.get("bkind", "blob")
-			if bk == "plain" or bk == "out":
-				# blob-free breather / wind-down: a plain jump must clear it
+			if s.get("bkind", "blob") == "out":
+				# blob-free wind-down: a plain jump must clear it
 				if s["gap"] > 0.68 * v:
 					stats["bad"] += 1
 			else:
-				# blob gaps: stomp-chain intended, one build the fallback;
-				# bmega: the build IS the crossing
+				# blob gap: the stomp chain is the line, one build the fallback
 				stats["builds"] += 1.0
 				if s["gap"] > one_build:
+					stats["bad"] += 1
+				# flow geometry: first blob one edge-jump out (0.5*v), a
+				# double's second one passive bounce later (0.6*v), and the
+				# bounce off the last blob (0.71*v of carry) must land
+				# INSIDE the far deck, never past it
+				stats["b1err"] = maxf(stats["b1err"], absf(s["b1"] - 0.5 * v))
+				var blast: float = s["b1"]
+				if s["blobs"] == 2:
+					stats["bsperr"] = maxf(stats["bsperr"],
+							absf(s["b2"] - s["b1"] - 0.6 * v))
+					blast = s["b2"]
+				var land_in: float = 0.71 * v - (s["gap"] - blast)
+				if land_in < 50.0 or land_in > s["width"] - 30.0:
 					stats["bad"] += 1
 		elif s.get("dead", false):
 			# dead zone: no jump exists in FLIPSIDE, so the crossing is

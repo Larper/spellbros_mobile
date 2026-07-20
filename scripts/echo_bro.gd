@@ -1,75 +1,72 @@
 class_name EchoBro
 extends Node2D
 
-## SPELLBROS level: the brother wizard — a cyan spirit echo mirroring the
-## player's arc through the camera's center line (you jump down, he jumps
-## up). Two jobs make him consequential, not decoration:
-##  - every crystal he touches is banked mana you didn't detour for:
-##    steering two arcs with one thumb is the level's skill
-##  - he GUARDS: a blob touch that would kill you is intercepted — the
-##    brother takes the hit and needs GUARD_COOLDOWN seconds to re-form
-##    (ghost-faint meanwhile), so the band is survivable exactly once
-##    per recharge. Watch his glow to know if the bond is ready.
+## SPELLBROS level (Neven's spec, round 3): the crimson spellbrother hovers
+## over the wizard's shoulder as a MANA-FUELED SHIELD. He never hunts —
+## stomps are the player's income and he must not touch them — but a blob
+## contact that WOULD KILL is burned out of existence for 1 mana. Broke
+## means unprotected: his glow is the pool readout, bright while a burn is
+## affordable, ember-faint when the next mistake is lethal.
 
-const COLLECT_RADIUS := 70.0
-const GUARD_COOLDOWN := 10.0
+const HOVER := Vector2(14.0, -238.0)
+const BURN_COST := 1
 
 var active := false
-var guard_cd := 0.0
-var t := 0.0
+var t := randf() * TAU
+var beam_t := 0.0
+var beam_to := Vector2.ZERO
 
 
 func _process(delta: float) -> void:
 	t += delta
-	guard_cd = maxf(0.0, guard_cd - delta)
+	beam_t -= delta
 	visible = active
 	if not active:
 		return
 	var main = get_tree().get_first_node_in_group("main")
-	if main == null or main.player.dead:
+	if main == null or main.player == null:
 		return
-	# mirror the wizard through the camera's horizontal center line
-	global_position.x = main.player.global_position.x - 60.0
-	global_position.y = 2.0 * main.cam.global_position.y - main.player.global_position.y
+	global_position = main.player.global_position + HOVER + Vector2(0.0, sin(t * 2.4) * 10.0)
 	queue_redraw()
-	# spirit hands: physics can't see him, so he grabs crystals by distance
-	for c in main.spawner.get_children():
-		if c is ManaCrystal and not c.collected \
-				and c.global_position.distance_to(global_position) < COLLECT_RADIUS:
-			c.collect()  # the orange +3 already floats its own text
-			if c.amount == 1:
-				main.float_text(c.global_position, "+1", Color("7ef2e0"))
 
 
 ## Called by SpikeBlob on a would-be-lethal touch. True = the brother
-## takes the hit instead of the wizard.
+## burns the blob instead, spending BURN_COST from the shared pool.
 func try_guard(at: Vector2) -> bool:
-	if not active or guard_cd > 0.0:
+	if not active:
 		return false
-	guard_cd = GUARD_COOLDOWN
 	var main = get_tree().get_first_node_in_group("main")
-	if main:
-		main.audio.play("squish")
-		main.float_text(at, "BRO!", Color("7ef2e0"))
+	if main == null or main.coins < BURN_COST:
+		return false
+	main.coins -= BURN_COST
+	main.hud.update_coins(main.coins)
+	main.audio.play("squish")
+	main.float_text(at, "-1", Color("ff5566"))
+	beam_to = at
+	beam_t = 0.16
 	return true
 
 
 func _draw() -> void:
 	if not active:
 		return
-	# translucent cyan echo of the wizard, drawn upside down (he's a
-	# mirror); barely-there while the guard bond recharges
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, -1.0))
-	var a := 0.5 + 0.15 * sin(t * 5.0)
-	if guard_cd > 0.0:
-		a *= 0.25
+	var main = get_tree().get_first_node_in_group("main")
+	var fueled: bool = main != null and main.coins >= BURN_COST
+	# ember-faint with an empty pool: his glow IS the mana readout
+	var a := (0.95 if fueled else 0.35) + 0.05 * sin(t * 5.0)
+	if beam_t > 0.0:
+		var to := to_local(beam_to)
+		draw_line(Vector2(10.0, -10.0), to, Color(1.0, 0.35, 0.3, 0.8), 7.0)
+		draw_line(Vector2(10.0, -10.0), to, Color(1.0, 0.8, 0.4, 0.9), 3.0)
+	# the wizard's silhouette in crimson
 	var robe := PackedVector2Array([
 		Vector2(-26, 40), Vector2(26, 40), Vector2(14, -6), Vector2(-14, -6),
 	])
-	draw_colored_polygon(robe, Color(0.35, 0.9, 0.85, a * 0.8))
-	draw_circle(Vector2(0, -16), 16.0, Color(0.7, 1.0, 0.95, a * 0.7))
+	draw_colored_polygon(robe, Color(0.82, 0.2, 0.3, a))
+	draw_circle(Vector2(0, -16), 16.0, Color(1.0, 0.78, 0.66, a))
 	var hat := PackedVector2Array([
 		Vector2(-20, -24), Vector2(20, -24), Vector2(2, -62),
 	])
-	draw_colored_polygon(hat, Color(0.3, 0.85, 0.8, a * 0.8))
-	draw_circle(Vector2(8, -16), 3.4, Color(0.05, 0.2, 0.2, a))
+	draw_colored_polygon(hat, Color(0.66, 0.12, 0.24, a))
+	draw_rect(Rect2(-24, -28, 48, 7), Color(0.5, 0.08, 0.2, a))
+	draw_circle(Vector2(8, -16), 3.4, Color(0.15, 0.03, 0.06, a))

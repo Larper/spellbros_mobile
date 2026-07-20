@@ -37,6 +37,13 @@ const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the p
 ## before a missed stair jump can be answered with a build.
 const CAMERA_CHASE_CAP := 400.0
 const RESTART_LOCKOUT_MS := 600.0
+## Level banners run a short beat ahead of the boundary — enough to read,
+## not so early the text lies about where you are (announcing SPRINGS a
+## full wind-down early felt wrong to Neven). UMBRA is the exception: its
+## banner stays synced to the darkness gradient, which ramps from 60 m out,
+## because pitch black needs real preparation time.
+const BANNER_LEAD_M := 18.0
+const BANNER_LEAD_UMBRA_M := 45.0
 
 static var session_best := 0.0
 ## -1 = show the level-select menu; otherwise the level index to auto-start
@@ -84,10 +91,11 @@ func _ready() -> void:
 	player.sprung.connect(func() -> void: audio.play("boing"))
 	add_child(player)
 	start_x = player.global_position.x
-	# tight halo: in pitch-black UMBRA the wizard sees barely one gap ahead —
-	# scouting the way means spending mana on lantern-platforms (they carry
-	# a 420 px light), so building becomes seeing
-	wizard_light = PsyTheme.make_light(300.0, 1.05)
+	# UMBRA halo: wide enough to read the next gap's near edge (the old
+	# 300 px saw barely past the wizard's feet and starved runs — Neven);
+	# the dark still owns everything past it, so lantern-builds stay the
+	# scouting tool
+	wizard_light = PsyTheme.make_light(460.0, 1.2)
 	wizard_light.enabled = false
 	player.add_child(wizard_light)
 
@@ -122,17 +130,20 @@ func _ready() -> void:
 ## Start (or restart) the run from the given unlocked level's boundary.
 func begin_run(i: int) -> void:
 	start_level = i
-	cur_level = i
-	announced_level = i
-	start_offset_m = Levels.start_m(i)
+	# debug_spawn_m (menu wheel/arrows): spawn deeper in — even past the
+	# chosen band's end — so the true level at the landing spot governs
+	start_offset_m = Levels.start_m(i) + Levels.debug_spawn_m
+	cur_level = Levels.level_for(start_offset_m)
+	announced_level = cur_level
 	distance_m = start_offset_m
-	# later starts get a small stake so the level twist is playable on arrival
-	coins = START_COINS if i == 0 else 2 + i
+	# any start past 0 m gets a small stake so the terrain there is playable
+	# on arrival (mega gaps demand mana from PHASE_BUILD on)
+	coins = START_COINS if start_offset_m <= 0.0 else 2 + cur_level
 	hud.update_coins(coins)
 	hud.update_score(int(distance_m))
 	hud.hide_menu()
-	if i > 0:
-		hud.show_level_banner("LEVEL %d: %s" % [i + 1, Levels.level_name(i)])
+	if start_offset_m > 0.0:
+		hud.show_level_banner("LEVEL %d: %s" % [cur_level + 1, Levels.level_name(cur_level)])
 	Main.auto_start_level = i
 	get_tree().paused = false
 
@@ -151,18 +162,20 @@ func _physics_process(delta: float) -> void:
 		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0 + start_offset_m)
 		player.run_speed = run_speed_for(distance_m)
 		hud.update_score(int(distance_m))
+		hud.update_powerups(player.shielded, player.double_jumps > 0)
 		# crossing a level boundary unlocks it as a starting point
 		var lv := Levels.level_for(distance_m)
 		if lv > cur_level:
 			cur_level = lv
 			Levels.unlock(lv)
-		# the banner runs AHEAD of the boundary: it fires as the previous
-		# band's wind-down begins (Neven: announcing UMBRA at 1200 m, when
-		# UMBRA starts, is too late to prepare)
-		var ann := Levels.level_for(distance_m + TerrainSpawner.WIND_DOWN_M)
-		if ann > announced_level:
-			announced_level = ann
-			hud.show_level_banner("LEVEL %d: %s" % [ann + 1, Levels.level_name(ann)])
+		# the banner still runs AHEAD of the boundary (announcing a level as
+		# it starts is too late to prepare), but only by its own short lead
+		var nxt := announced_level + 1
+		if nxt < Levels.count() and distance_m + banner_lead_for(nxt) >= Levels.start_m(nxt):
+			# level_for swallows skipped bands when distance jumps (late starts)
+			announced_level = Levels.level_for(distance_m + banner_lead_for(nxt))
+			hud.show_level_banner("LEVEL %d: %s" % [announced_level + 1,
+					Levels.level_name(announced_level)])
 			audio.play("pickup")
 		# per-level state: darkness light, the echo brother, gravity hygiene
 		wizard_light.enabled = lv == Levels.UMBRA
@@ -196,17 +209,30 @@ func _physics_process(delta: float) -> void:
 
 
 func camera_target_y() -> float:
+	# FLIPSIDE frames the whole corridor: the wizard's surface sits ~40 px
+	# inside it, so offsetting 240 px toward its middle — from either
+	# gravity — keeps BOTH floor and ceiling on screen. A coming gap in the
+	# ceiling must never be invisible overhead (Neven).
+	if in_flip_zone():
+		return clampf(player.global_position.y - 240.0 * player.gravity_dir, 150.0, 1000.0)
 	# Frame the player with a slightly lower baseline than before, and ease
 	# further down when the terrain ahead sits lower, so the next pillar is
 	# already on screen while descending. Chunk tops are static world data,
 	# so this never pulses with the jump arc.
 	var target := player.global_position.y - 60.0
+	# A hard fall drags the frame down ahead of the wizard: what's below
+	# matters more than the sky above (Neven twice: pillar tops arrived
+	# unseen). Kicks in just before a flat jump's landing speed (1170), so
+	# plain hops get at most a whisper of it right at touchdown; real drops
+	# pull the frame down hard and the bottom clamp gives them 1000 px of
+	# room (view bottom 1432 — still below the deepest ground at 970).
+	target += minf(maxf(0.0, player.velocity.y - 1000.0) * 0.7, 480.0)
 	var ahead := _lowest_ground_ahead()
 	if ahead > 0.0:
 		# 360/240 keep the same screen fractions the pre-zoom 450/300 gave the
 		# full-height view (visible half-height is now 432, not 540)
 		target = maxf(target, minf(ahead - 360.0, player.global_position.y + 240.0))
-	return clampf(target, 150.0, 920.0)
+	return clampf(target, 150.0, 1000.0)
 
 
 func _lowest_ground_ahead() -> float:
@@ -220,6 +246,16 @@ func _lowest_ground_ahead() -> float:
 		if g.position.x <= px + 700.0 and g.position.x + g.width >= px:
 			lowest = maxf(lowest, g.position.y)
 	return lowest
+
+
+func banner_lead_for(lv: int) -> float:
+	if lv == Levels.UMBRA:
+		return BANNER_LEAD_UMBRA_M
+	if lv == Levels.FLIPSIDE:
+		# fires ON the boundary: the opening runway IS the reading room, and
+		# announcing during the bridges wind-down was still too soon (Neven)
+		return 0.0
+	return BANNER_LEAD_M
 
 
 func run_speed_for(d: float) -> float:
@@ -237,7 +273,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch and event.pressed:
 		_handle_tap(event.position)
 	elif event is InputEventKey and event.pressed and not event.echo:
-		# PC convenience: Space jumps, R restarts
+		# PC convenience: Space jumps, R restarts; S/D are dev grants so
+		# the powerup visuals are testable without hunting for pickups
 		if event.keycode == KEY_SPACE:
 			if game_over:
 				_maybe_restart()
@@ -245,6 +282,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				_jump_pressed()
 		elif event.keycode == KEY_R and game_over:
 			_maybe_restart()
+		elif event.keycode == KEY_S and not game_over:
+			player.shielded = true
+			float_text(player.global_position + Vector2(0, -50), "SHIELD!", Color("b98cff"))
+		elif event.keycode == KEY_D and not game_over:
+			player.double_jumps = 1
+			float_text(player.global_position + Vector2(0, -50), "DOUBLE JUMP!", Color("ffd75e"))
 
 
 func _handle_tap(screen_pos: Vector2) -> void:
@@ -346,6 +389,7 @@ func _on_player_died() -> void:
 	audio.stop_music()
 	audio.play("death")
 	session_best = maxf(session_best, distance_m)
-	Levels.save_best(start_level, int(distance_m))
+	if Levels.debug_spawn_m <= 0.0:  # debug spawns never pollute the bests
+		Levels.save_best(start_level, int(distance_m))
 	hud.show_game_over(int(distance_m), Levels.best_for(start_level),
 			Levels.level_name(start_level))
