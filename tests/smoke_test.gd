@@ -622,12 +622,13 @@ func _run_tests() -> void:
 	_check(springb["mana"] >= springb["builds"] * 0.8, "springs pad economy")
 	# the rhythm: easy deck sections split by void crossings (~1 in 3-5)
 	_check(springb["svoid"] > 8 and springb["svoid"] < 40, "springs deck/void rhythm")
-	# BLOB BRIDGES band: bridges throughout, blobs as stepping stones, plus
-	# blob-free variety (plain breathers and build-demanding megas)
+	# BLOB BRIDGES band: EVERY gap is a blob bridge (singles and doubles),
+	# and the chain geometry holds exactly — first blob one edge-jump out,
+	# doubles one passive bounce apart
 	var bridgeb := _probe(Levels.start_m(Levels.BRIDGES) + 50.0, 80)
-	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 40 and bridgeb["climbs"] == 0,
-			"blob bridges band")
-	_check(bridgeb["bplain"] > 0 and bridgeb["bmega"] > 0, "bridges variety")
+	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] > 80 and bridgeb["climbs"] == 0,
+			"blob bridges band: every gap a blob bridge, doubles present")
+	_check(bridgeb["b1err"] < 0.5 and bridgeb["bsperr"] < 0.5, "bridges flow geometry")
 	# bridges wind-down: the corridor is entered calm — no blobs at the end
 	var bridge_out := _probe(Levels.start_m(Levels.FLIPSIDE) - 20.0, 80)
 	_check(bridge_out["bridge"] == 80 and bridge_out["enemies"] == 0,
@@ -682,8 +683,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.flip_strip_start = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"dead": 0, "spring": 0, "svoid": 0, "bplain": 0, "bmega": 0,
-			"min_top": 9999.0, "bad": 0,
+			"dead": 0, "spring": 0, "svoid": 0,
+			"min_top": 9999.0, "bad": 0, "b1err": 0.0, "bsperr": 0.0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -716,10 +717,6 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["spring"] += 1
 		if s.get("svoid", false):
 			stats["svoid"] += 1
-		if s.get("bkind", "") == "plain":
-			stats["bplain"] += 1
-		if s.get("bkind", "") == "bmega":
-			stats["bmega"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
@@ -730,16 +727,27 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["void"]:
 			stats["builds"] += ceilf(s["gap"] / one_build)
 		elif s.get("bridge", false):
-			var bk: String = s.get("bkind", "blob")
-			if bk == "plain" or bk == "out":
-				# blob-free breather / wind-down: a plain jump must clear it
+			if s.get("bkind", "blob") == "out":
+				# blob-free wind-down: a plain jump must clear it
 				if s["gap"] > 0.68 * v:
 					stats["bad"] += 1
 			else:
-				# blob gaps: stomp-chain intended, one build the fallback;
-				# bmega: the build IS the crossing
+				# blob gap: the stomp chain is the line, one build the fallback
 				stats["builds"] += 1.0
 				if s["gap"] > one_build:
+					stats["bad"] += 1
+				# flow geometry: first blob one edge-jump out (0.5*v), a
+				# double's second one passive bounce later (0.6*v), and the
+				# bounce off the last blob (0.71*v of carry) must land
+				# INSIDE the far deck, never past it
+				stats["b1err"] = maxf(stats["b1err"], absf(s["b1"] - 0.5 * v))
+				var blast: float = s["b1"]
+				if s["blobs"] == 2:
+					stats["bsperr"] = maxf(stats["bsperr"],
+							absf(s["b2"] - s["b1"] - 0.6 * v))
+					blast = s["b2"]
+				var land_in: float = 0.71 * v - (s["gap"] - blast)
+				if land_in < 50.0 or land_in > s["width"] - 30.0:
 					stats["bad"] += 1
 		elif s.get("dead", false):
 			# dead zone: no jump exists in FLIPSIDE, so the crossing is
