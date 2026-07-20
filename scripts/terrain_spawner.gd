@@ -466,12 +466,13 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var used := 0
 	if rng.randf() < 0.6:
 		# crystals ride the FLIP TRANSIT itself: sampled from the corridor-
-		# crossing free-fall arc (gravity 3300 from rest), fired a beat into
-		# the shared window — chasing the mana IS taking the flip on time.
-		# Random placements read as noise in this level (Neven): fragments
-		# must draw the optimal line, and here the line is the flip.
-		var x0 := start + 0.25 * ov
-		for tau: float in [0.2, 0.36, 0.5]:
+		# crossing free-fall arc (gravity 3300 from rest), fired from MID
+		# window — chasing the mana IS taking the flip on time. Random
+		# placements read as noise in this level (Neven), and the trail
+		# starts 129 px off the surface (tau 0.28): a fragment hugging a
+		# strip's edge baits the player toward the drop-off (Neven again).
+		var x0 := start + 0.45 * ov
+		for tau: float in [0.28, 0.42, 0.54]:
 			var fall := 1650.0 * tau * tau
 			var fy := (floor_y - 20.0 - fall) if flip_on_floor \
 					else (floor_y - FLIP_CORRIDOR + 20.0 + fall)
