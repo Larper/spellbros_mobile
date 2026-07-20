@@ -249,16 +249,18 @@ func _run_tests() -> void:
 	p.velocity = Vector2.ZERO
 	await create_timer(0.1).timeout
 
-	# FLIPSIDE: jump-tap flips gravity (cooldown eats spam), builds are solid
+	# FLIPSIDE: buffered grounded flip, spam guard, solid builds
 	main.distance_m = 950.0
 	p.flip_cooldown = 0.0
 	main._jump_pressed()
+	await create_timer(0.07).timeout  # buffered flip fires on a grounded frame
 	var flipped: bool = p.gravity_dir < 0.0
-	main._jump_pressed()  # immediate second tap must be swallowed
+	main._jump_pressed()  # airborne + inside cooldown: must not flip again
+	await create_timer(0.07).timeout
 	var still_flipped: bool = p.gravity_dir < 0.0
-	p.flip_cooldown = 0.0
-	main._jump_pressed()
-	var righted: bool = p.gravity_dir > 0.0
+	p.flip_buffer = 0.0
+	p.gravity_dir = 1.0
+	p.velocity = Vector2.ZERO
 	main.coins = 1
 	main.build_cooldown = 0.0
 	main._try_build(Vector2(p.global_position.x + 3600.0, 300.0))
@@ -266,10 +268,24 @@ func _run_tests() -> void:
 	for c in main.get_children():
 		if c is BuiltPlatform:
 			flip_pad = c
-	print("TEST flipside: flip=%s spam_guard=%s unflip=%s solid_build=%s (expect all true)" % [
-		flipped, still_flipped, righted, not flip_pad._cs.one_way_collision])
-	_check(flipped and still_flipped and righted \
-			and not flip_pad._cs.one_way_collision, "flipside")
+	print("TEST flipside: flip=%s spam_guard=%s solid_build=%s (expect all true)" % [
+		flipped, still_flipped, not flip_pad._cs.one_way_collision])
+	_check(flipped and still_flipped and not flip_pad._cs.one_way_collision, "flipside")
+
+	# the reported bug: a tap moments BEFORE touchdown must still flip
+	main.coins = 1
+	main.build_cooldown = 0.0
+	main._try_build(Vector2(p.global_position.x + 200.0, 700.0))
+	p.global_position = Vector2(p.global_position.x + 200.0, 620.0)
+	p.velocity = Vector2(0.0, 350.0)  # falling, a few frames above the pad
+	p.flip_cooldown = 0.0
+	p.try_flip()  # airborne: buffers, must fire on touchdown
+	await create_timer(0.12).timeout
+	print("TEST flipbuffer: flipped_on_landing=%s (expect true)" % [p.gravity_dir < 0.0])
+	_check(p.gravity_dir < 0.0, "flip buffered across landing")
+	p.flip_buffer = 0.0
+	p.gravity_dir = 1.0
+	p.velocity = Vector2.ZERO
 
 	# no hover/hop cheese: flips only from a surface or coyote — airborne
 	# taps are refused outright (a mid-air flip is a disguised jump)
@@ -281,6 +297,7 @@ func _run_tests() -> void:
 	print("TEST flipcheese: airborne_flip_refused=%s (expect true, gravity unchanged)" % [
 		p.gravity_dir > 0.0])
 	_check(p.gravity_dir > 0.0, "no airborne flip")
+	p.flip_buffer = 0.0
 	p.velocity = Vector2.ZERO
 
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
@@ -387,12 +404,12 @@ func _run_tests() -> void:
 
 	# level-band probes + beatability audit: 80 chunks per distance band
 	print("TEST phases (80 chunks each):")
-	print("  band     mega enem maxEnt climb void pilr star brdg flip  minTop  pace  gap/reach mana/ch builds/ch  bad")
+	print("  band     mega enem maxEnt climb void pilr star brdg flip sprg  minTop  pace  gap/reach mana/ch builds/ch  bad")
 	for d: float in [15.0, 45.0, 80.0, 130.0, 230.0, 350.0, 700.0, 1000.0, 1300.0, 1600.0, 1900.0]:
 		var s := _probe(d, 80)
-		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
+		print("  d=%4dm  %3d  %3d  %4d  %4d  %3d  %3d  %3d  %3d  %3d  %3d  %5d  %.2f/s  %.2f      %.2f    %.2f      %3d" % [
 			int(d), s["mega"], s["enemies"], s["max_entities"], s["climbs"],
-			s["voids"], s["pillars"], s["stars"], s["bridge"], s["flip"],
+			s["voids"], s["pillars"], s["stars"], s["bridge"], s["flip"], s["spring"],
 			int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
@@ -412,9 +429,14 @@ func _run_tests() -> void:
 	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
 	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
 	_check(mid["stars"] + swarm["stars"] > 0, "stars spawn after enemy phase")
-	# SPRINGS band: dense climb waves to exploit the launcher builds
-	var climbb := _probe(Levels.start_m(Levels.SPRINGS) + 50.0, 80)
-	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live in springs band")
+	# foundations climb waves (from PHASE_CLIMB, inside level 0)
+	var climbb := _probe(130.0, 80)
+	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
+	# SPRINGS band, void-like: pillar diagonals, no enemies, pads affordable
+	var springb := _probe(Levels.start_m(Levels.SPRINGS) + 50.0, 80)
+	_check(springb["spring"] == 80 and springb["enemies"] == 0 and springb["mega"] == 0,
+			"springs void band")
+	_check(springb["mana"] >= springb["builds"] * 0.8, "springs pad economy")
 	# BLOB BRIDGES band: every chunk a bridge, blobs as stepping stones
 	var bridgeb := _probe(Levels.start_m(Levels.BRIDGES) + 50.0, 80)
 	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] >= 80 and bridgeb["climbs"] == 0,
@@ -431,7 +453,7 @@ func _run_tests() -> void:
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 	# teach-ins: every level's first ~45 m is its mechanic in gentle form
 	var teach_spring := _probe(Levels.start_m(Levels.SPRINGS) + 10.0, 80)
-	_check(teach_spring["mega"] == 0 and teach_spring["enemies"] == 0 \
+	_check(teach_spring["spring"] == 80 and teach_spring["enemies"] == 0 \
 			and teach_spring["climbs"] == 0, "springs teach-in is calm")
 	var teach_bridge := _probe(Levels.start_m(Levels.BRIDGES) + 10.0, 80)
 	_check(teach_bridge["bridge"] == 80 and teach_bridge["enemies"] == 80,
@@ -456,7 +478,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"dead": 0, "min_top": 9999.0, "bad": 0,
+			"dead": 0, "spring": 0, "min_top": 9999.0, "bad": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -485,6 +507,8 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["flip"] += 1
 		if s.get("dead", false):
 			stats["dead"] += 1
+		if s.get("spring", false):
+			stats["spring"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
@@ -500,9 +524,19 @@ func _probe(d: float, n: int) -> Dictionary:
 			if s["gap"] > one_build:
 				stats["bad"] += 1
 		elif s.get("dead", false):
-			# dead zone: both surfaces gone; exactly one built platform bridges
+			# dead zone: no jump exists in FLIPSIDE, so the crossing is
+			# run-off fall + one pad + run-off fall onto the LOWER far deck
 			stats["builds"] += 1.0
-			if s["gap"] > one_build:
+			if s["gap"] > 0.5 * v + 240.0:
+				stats["bad"] += 1
+		elif s.get("spring", false):
+			# rising steps demand one launcher pad; the -1500 arc must reach
+			if s["rise"] > 0.0:
+				stats["builds"] += 1.0
+				var t_reach := (1500.0 + sqrt(maxf(0.0, 2250000.0 - 6600.0 * s["rise"]))) / 3300.0
+				if s["rise"] > 320.0 or s["gap"] > 0.92 * t_reach * v:
+					stats["bad"] += 1
+			elif s["gap"] > 0.8 * v:
 				stats["bad"] += 1
 		elif s.get("flip", false):
 			# chain strip: needs a real shared flip window (0.25 s of travel)

@@ -95,6 +95,9 @@ var void_y := START_GROUND_Y - 120.0
 # (true on entering the band — he arrives running the floor)
 var flip_on_floor := true
 
+# SPRINGS diagonal state: -1 climbing the sky, +1 descending to the deck
+var spring_dir := -1
+
 
 func _ready() -> void:
 	rng.randomize()
@@ -135,6 +138,8 @@ func _spawn_chunk() -> Dictionary:
 		return _spawn_void_segment()
 
 	var lv := Levels.level_for(d)
+	if lv == Levels.SPRINGS:
+		return _spawn_spring_chunk(d, v)
 	if lv == Levels.BRIDGES:
 		return _spawn_bridge_chunk(d, v, budget)
 	if lv == Levels.FLIPSIDE:
@@ -247,6 +252,46 @@ func _spawn_chunk() -> Dictionary:
 	}
 
 
+## SPRINGS level, void-like (Neven's spec): open sky, sparse narrow pillars
+## riding rising and falling diagonals. Up-steps (220-300 px) outreach the
+## 207 px jump — the intended move is a spring-pad build (every build here
+## launches at -1500, a 341 px rise): drop a pad, launch, arc onto the next
+## pillar. Descents are free-fall runs. Crystals pay the pad tolls.
+func _spawn_spring_chunk(d: float, v: float) -> Dictionary:
+	var teach := _is_teach(d)
+	# ride the diagonal between the sky bound and the deck
+	if last_top_y <= 400.0:
+		spring_dir = 1
+	elif last_top_y >= 840.0:
+		spring_dir = -1
+	var gap: float
+	var dy: float
+	if spring_dir == -1:
+		dy = -(rng.randf_range(200.0, 240.0) if teach else rng.randf_range(220.0, 300.0))
+		gap = rng.randf_range(0.35, 0.45) * v if teach else rng.randf_range(0.4, 0.55) * v
+	else:
+		dy = rng.randf_range(200.0, 300.0)
+		gap = rng.randf_range(0.5, 0.65) * v if teach else rng.randf_range(0.55, 0.75) * v
+	var w := rng.randf_range(300.0, 380.0) if teach else rng.randf_range(220.0, 320.0)
+	var top_y := clampf(last_top_y + dy, 340.0, 940.0)
+	var rise := maxf(0.0, last_top_y - top_y)
+	var x := next_x + gap
+	_place_chunk(x, top_y, w)
+	var used := 0
+	if rng.randf() < (0.95 if teach else 0.85):
+		# crystal on the arc between the pillars: income tracks the tolls
+		_place_coin(Vector2(next_x + gap * 0.6, minf(last_top_y, top_y) - 120.0))
+		used = 1
+	next_x = x + w
+	last_top_y = top_y
+	return {
+		"gap": gap, "width": w, "top_y": top_y, "mega": false,
+		"enemies": 0, "entities": used, "climb": 0,
+		"void": false, "pillar": false, "spring": true, "stars": 0,
+		"rise": rise, "speed": v,
+	}
+
+
 ## FLIPSIDE level: a two-surface corridor of FLIP CHAINS — alternating
 ## floor and ceiling strips that share ONLY an overlap window (ov), so the
 ## run is a sustained rhythm of flip-run-flip-run, never longer than ~0.5 s
@@ -262,21 +307,25 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var ov := (0.45 if teach else 0.30) * v
 	var floor_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
 
-	# dead zone: only rolled while the wizard's lane is the floor
+	# dead zone: only rolled while the wizard's lane is the floor. There is
+	# no jump in this level, so crossing = run off the edge, catch yourself
+	# on ONE pad built near deck height, run off it again. Gaps are sized
+	# for a single pad and the far deck steps DOWN so the drift has room.
 	if not teach and flip_on_floor and rng.randf() < FLIP_DEAD_CHANCE:
-		var gap := rng.randf_range(0.8 * v, 1.2 * v)
+		var gap := rng.randf_range(0.45 * v, 0.7 * v)
 		var w := rng.randf_range(0.7 * v, 1.0 * v)
+		var far_y := clampf(floor_y + rng.randf_range(60.0, 110.0), 800.0, 940.0)
 		var x := next_x + gap
-		_place_chunk(x, floor_y, w)
+		_place_chunk(x, far_y, w)
 		var used := 0
 		if rng.randf() < 0.7:
 			# the reward for paying the bridge toll hangs over the emptiness
-			_place_coin(Vector2(next_x + gap * 0.5, floor_y - 260.0))
+			_place_coin(Vector2(next_x + gap * 0.5, floor_y - 240.0))
 			used = 1
 		next_x = x + w
-		last_top_y = floor_y
+		last_top_y = far_y
 		return {
-			"gap": gap, "width": w, "top_y": floor_y, "mega": false,
+			"gap": gap, "width": w, "top_y": far_y, "mega": false,
 			"enemies": 0, "entities": used, "climb": 0,
 			"void": false, "pillar": false, "flip": true, "dead": true,
 			"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
@@ -396,11 +445,8 @@ func _update_climb_state(d: float) -> void:
 		# occasional set-piece: needs a breather of flat terrain first.
 		# The SPRINGS level doubles down on verticality: waves come more
 		# often and with barely a breather, since every build launches.
-		var springs_lv := Levels.level_for(d) == 1
-		var chance := 0.5 if springs_lv else CLIMB_CHANCE
-		var cooldown := 2 if springs_lv else CLIMB_COOLDOWN
 		if d >= PHASE_CLIMB and last_top_y > 800.0 and not _is_teach(d) \
-				and flat_chunks_since_wave >= cooldown and rng.randf() < chance:
+				and flat_chunks_since_wave >= CLIMB_COOLDOWN and rng.randf() < CLIMB_CHANCE:
 			climb_dir = -1
 			climb_steps_left = 2 + rng.randi() % 3
 	elif climb_dir == -1:

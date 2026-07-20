@@ -26,6 +26,7 @@ var air_jumps := 0  # Star of Levity charge: one stored mid-air jump
 var stomp_jump := false  # stomping an enemy refreshes one jump until landing
 var gravity_dir := 1.0  # FLIPSIDE: -1 runs the ceiling; +1 the floor
 var flip_cooldown := 0.0
+var flip_buffer := 0.0  # taps buffer like jumps: a tap just before landing sticks
 
 
 func _init() -> void:
@@ -59,6 +60,17 @@ func _physics_process(delta: float) -> void:
 	else:
 		coyote -= delta
 
+	# buffered gravity flip fires on the first grounded frame (FLIPSIDE)
+	if flip_buffer > 0.0 and flip_cooldown <= 0.0 \
+			and (is_on_floor() or coyote > 0.0):
+		flip_buffer = 0.0
+		gravity_dir = -gravity_dir
+		velocity.y = 0.0
+		coyote = 0.0
+		flip_cooldown = 0.18
+		jumped.emit()
+	flip_buffer -= delta
+
 	# the free stomp refresh (or coyote) is consumed before a precious star charge
 	if jump_buffer > 0.0 and (coyote > 0.0 or stomp_jump):
 		velocity.y = JUMP_VELOCITY * gravity_dir
@@ -91,22 +103,16 @@ func try_jump() -> void:
 	jump_buffer = JUMP_BUFFER
 
 
-## FLIPSIDE: invert gravity — but ONLY from a surface (or the coyote
-## window). A flip is a commitment: once airborne there is no second flip
-## until you land, because any mid-air flip doubles as a disguised jump
-## (flip up, flip back = hop over floor gaps without ever touching the
-## ceiling). The recovery tool for a bad flip is a BUILD: pads are solid
-## in this level and catch the wizard from either gravity.
+## FLIPSIDE: request a gravity flip. Buffered like a jump (0.12 s), but it
+## only EXECUTES from a surface or the coyote window — once airborne the
+## wizard is committed until landing, because any true mid-air flip doubles
+## as a disguised jump (flip up, flip back = hop over floor gaps without
+## ever touching the ceiling). The recovery tool for a bad flip is a BUILD:
+## pads are solid in this level and catch the wizard from either gravity.
 func try_flip() -> void:
-	if flip_cooldown > 0.0 or dead:
+	if dead:
 		return
-	if not is_on_floor() and coyote <= 0.0:
-		return
-	gravity_dir = -gravity_dir
-	velocity.y = 0.0
-	coyote = 0.0
-	flip_cooldown = 0.18
-	jumped.emit()
+	flip_buffer = JUMP_BUFFER
 
 
 func bounce() -> void:

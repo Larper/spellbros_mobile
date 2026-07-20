@@ -41,7 +41,10 @@ func _on_body_entered(body: Node2D) -> void:
 	var p := body as Player
 	if p == null or p.dead:
 		return
-	var stomped: bool = p.velocity.y > 40.0 and p.global_position.y < global_position.y - 10.0
+	# Forgiving stomp: any contact from above counts unless the wizard is
+	# clearly rising into it from below — apex touches and glancing falls
+	# all squish (Neven: strict falling-only stomps were frustrating).
+	var stomped: bool = p.velocity.y > -200.0 and p.global_position.y < global_position.y - 4.0
 	if stomped:
 		_squash(p)
 	else:
