@@ -29,6 +29,9 @@ const PHASE_VOID := 1800.0  # the endgame after the SPELLBROS level
 
 const FLIP_CORRIDOR := 560.0  # floor-to-ceiling height in the FLIPSIDE level
 const FLIP_DEAD_CHANCE := 0.25  # dead zones: both surfaces gone, build to cross
+## FLIPSIDE wind-down: the band's last meters run on a continuous floor and
+## Main hands the tap back to jumping, so the boundary can't eat a flip.
+const FLIP_OUT_M := 45.0
 
 ## Every level's first ~45 m (3-4 gaps) is a teach-in: the new mechanic in
 ## its gentlest form, no ambushes, before the band ramps to full intensity.
@@ -94,6 +97,7 @@ var void_y := START_GROUND_Y - 120.0
 # FLIPSIDE chain state: which surface the wizard's current lane is on
 # (true on entering the band — he arrives running the floor)
 var flip_on_floor := true
+var flip_strip_start := 0.0  # left edge of the last chain strip placed
 
 # SPRINGS rhythm state: pillars left in the current easy deck section;
 # when it reaches 0 the next chunk is a void crossing
@@ -331,6 +335,10 @@ func _spawn_spring_void(d: float, v: float) -> Dictionary:
 ## from both gravities here) always bridges it. Mana pressure, meet flips.
 func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var teach := _is_teach(d)
+	# wind-down: hand the run back to plain floor before the next level
+	var out_left := Levels.start_m(Levels.UMBRA) - d
+	if out_left <= FLIP_OUT_M:
+		return _spawn_flip_outro(v)
 	# teach-in: wider flip windows, longer strips, no dead zones yet
 	var ov := (0.45 if teach else 0.30) * v
 	var floor_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
@@ -339,7 +347,9 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	# no jump in this level, so crossing = run off the edge, catch yourself
 	# on ONE pad built near deck height, run off it again. Gaps are sized
 	# for a single pad and the far deck steps DOWN so the drift has room.
-	if not teach and flip_on_floor and rng.randf() < FLIP_DEAD_CHANCE:
+	# None near the wind-down: no hole right where gravity gets handed back.
+	if not teach and flip_on_floor and out_left > FLIP_OUT_M + 20.0 \
+			and rng.randf() < FLIP_DEAD_CHANCE:
 		var gap := rng.randf_range(0.45 * v, 0.7 * v)
 		var w := rng.randf_range(0.7 * v, 1.0 * v)
 		var far_y := clampf(floor_y + rng.randf_range(60.0, 110.0), 800.0, 940.0)
@@ -362,6 +372,7 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	# chain strip: the opposite surface, starting ov inside the current one
 	var w := rng.randf_range(1.1 * v, 1.4 * v) if teach else rng.randf_range(0.75 * v, 1.1 * v)
 	var start := next_x - ov
+	flip_strip_start = start
 	if flip_on_floor:
 		_place_ceiling(start, floor_y - FLIP_CORRIDOR, w)
 	else:
@@ -379,6 +390,35 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 		"enemies": 0, "entities": used, "climb": 0,
 		"void": false, "pillar": false, "flip": true, "dead": false,
 		"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
+	}
+
+
+## The corridor's wind-down (last FLIP_OUT_M meters of FLIPSIDE): one
+## continuous floor — no ceilings, no dead zones, no gaps — while Main
+## rights gravity and taps become jumps again, so the level boundary can
+## never eat a habitual flip into a hole (how Neven died). The first outro
+## strip reaches back under the final ceiling strip: wherever the hand-back
+## drops a ceiling runner, ground is waiting.
+func _spawn_flip_outro(v: float) -> Dictionary:
+	var floor_y := clampf(last_top_y, 800.0, 940.0)
+	var start := next_x - 0.3 * v
+	if not flip_on_floor:
+		start = minf(start, flip_strip_start)
+		flip_on_floor = true
+	var gap := start - next_x  # negative: outro strips overlap what came before
+	var w := (next_x - start) + rng.randf_range(0.9 * v, 1.2 * v)
+	_place_chunk(start, floor_y, w)
+	var used := 0
+	if rng.randf() < 0.4:
+		_place_coin(Vector2(start + w * 0.6, floor_y - 60.0))
+		used = 1
+	last_top_y = floor_y
+	next_x = start + w
+	return {
+		"gap": gap, "width": w, "top_y": floor_y, "mega": false,
+		"enemies": 0, "entities": used, "climb": 0,
+		"void": false, "pillar": false, "flip": true, "dead": false,
+		"overlap": -gap, "stars": 0, "rise": 0.0, "speed": v,
 	}
 
 

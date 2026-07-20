@@ -314,6 +314,20 @@ func _run_tests() -> void:
 	p.flip_buffer = 0.0
 	p.velocity = Vector2.ZERO
 
+	# wind-down hand-back: in the band's last stretch a tap is a JUMP again
+	# and a leftover ceiling gravity rights itself on the next physics frame
+	main.distance_m = Levels.start_m(Levels.UMBRA) - 20.0
+	p.gravity_dir = -1.0
+	p.jump_buffer = 0.0
+	main._jump_pressed()
+	var outro_jumps: bool = p.jump_buffer > 0.0
+	await create_timer(0.05).timeout
+	print("TEST flipoutro: tap_jumps=%s (expect true) gravity=%.0f (expect 1)" % [
+		outro_jumps, p.gravity_dir])
+	_check(outro_jumps and p.gravity_dir > 0.0, "flipside wind-down hand-back")
+	p.jump_buffer = 0.0
+	p.velocity = Vector2.ZERO
+
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
 	main.distance_m = 1300.0
 	main.psy._process(0.016)
@@ -477,6 +491,10 @@ func _run_tests() -> void:
 	var teach_flip := _probe(Levels.start_m(Levels.FLIPSIDE) + 10.0, 80)
 	_check(teach_flip["flip"] == 80 and teach_flip["dead"] == 0,
 			"flipside teach-in: chains, no dead zones")
+	# FLIPSIDE wind-down: continuous floor near the deck, no dead zones
+	var outro := _probe(Levels.start_m(Levels.UMBRA) - 20.0, 80)
+	_check(outro["flip"] == 80 and outro["dead"] == 0 and outro["min_top"] >= 800.0,
+			"flipside outro floor")
 	var teach_void := _probe(TerrainSpawner.PHASE_VOID + 10.0, 80)
 	_check(teach_void["pillars"] > voidb["pillars"], "void teach-in: denser pillars")
 
@@ -493,6 +511,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
+	main.spawner.flip_on_floor = true
+	main.spawner.flip_strip_start = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "spring": 0, "svoid": 0, "min_top": 9999.0, "bad": 0,

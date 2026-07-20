@@ -156,9 +156,10 @@ func _physics_process(delta: float) -> void:
 		# per-level state: darkness light, the echo brother, gravity hygiene
 		wizard_light.enabled = lv == Levels.UMBRA
 		bro.active = lv == Levels.BROS
-		if lv != Levels.FLIPSIDE and player.gravity_dir < 0.0:
-			player.gravity_dir = 1.0  # leaving the corridor rights the world
-		if lv == Levels.FLIPSIDE and player.global_position.y < cam.global_position.y - 710.0:
+		var flip_zone := in_flip_zone()
+		if not flip_zone and player.gravity_dir < 0.0:
+			player.gravity_dir = 1.0  # the wind-down / next level rights the world
+		if flip_zone and player.global_position.y < cam.global_position.y - 710.0:
 			player.die()  # flew off the top with no ceiling to catch you
 		if player.global_position.y > cam.global_position.y + 710.0:
 			player.die()  # ~280 world px below the zoomed view's bottom edge
@@ -256,9 +257,19 @@ func _handle_tap(screen_pos: Vector2) -> void:
 		_try_build(world_pos)
 
 
+## True while the tap action is the gravity flip: inside FLIPSIDE minus its
+## wind-down stretch, where the spawner returns to a continuous floor and
+## control is handed back BEFORE the boundary — so crossing into the next
+## level never eats a habitual flip into a hole (how Neven died: flipped up
+## right where the ceilings had already ended).
+func in_flip_zone() -> bool:
+	return Levels.level_for(distance_m) == Levels.FLIPSIDE \
+			and distance_m < Levels.start_m(Levels.UMBRA) - TerrainSpawner.FLIP_OUT_M
+
+
 ## The jump tap doubles as the gravity flip inside FLIPSIDE.
 func _jump_pressed() -> void:
-	if Levels.level_for(distance_m) == Levels.FLIPSIDE:
+	if in_flip_zone():
 		player.try_flip()
 	else:
 		player.try_jump()
