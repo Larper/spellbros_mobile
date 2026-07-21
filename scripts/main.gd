@@ -202,7 +202,13 @@ func _physics_process(delta: float) -> void:
 		var flip_zone := in_flip_zone()
 		if not flip_zone and player.gravity_dir < 0.0:
 			player.gravity_dir = 1.0  # the wind-down / next level rights the world
-		if flip_zone and player.global_position.y < CAMERA_Y - 710.0:
+		# SPELLBROS shares FLIPSIDE's death ceiling (Neven): the band must
+		# be played inside the frame, not cheesed by building a blind lane
+		# above it. Legit play clears it: the highest sky blob sits at
+		# y >= 340 (audited), so crown 308 + bounce 152 + refresh jump 207
+		# tops out at -51 — 40 px under the -90 line.
+		if (flip_zone or lv == Levels.BROS) \
+				and player.global_position.y < CAMERA_Y - 710.0:
 			player.die()  # flew off the top with no ceiling to catch you
 		if player.global_position.y > CAMERA_Y + 710.0:
 			player.die()  # ~280 world px below the zoomed view's bottom edge

@@ -638,6 +638,22 @@ func _run_tests() -> void:
 	p.velocity = Vector2.ZERO
 	main.game_over = false
 	main.hud.over_root.visible = false
+
+	# the band's death ceiling: SPELLBROS is played inside the frame —
+	# flying above it (the build-a-blind-lane cheese) is death, exactly
+	# like FLIPSIDE's fly-off-the-top rule
+	var ceil_prev_y: float = p.global_position.y
+	p.global_position.y = Main.CAMERA_Y - 800.0
+	await create_timer(0.1).timeout
+	print("TEST brosceiling: dead=%s (expect true)" % p.dead)
+	_check(p.dead, "spellbros death ceiling")
+	p.global_position.y = ceil_prev_y
+	p.dead = false
+	p.collision_mask = 1
+	p.rotation = 0.0
+	p.velocity = Vector2.ZERO
+	main.game_over = false
+	main.hud.over_root.visible = false
 	main.distance_m = 20.0
 
 	# S / D dev keys grant the shield and the double jump on demand
@@ -747,11 +763,11 @@ func _run_tests() -> void:
 			int(s["min_top"]), s["pace"],
 			s["gap_ratio"], s["mana"], s["builds"], s["bad"]])
 		_check(s["bad"] == 0, "beatability at d=%d" % int(d))
-		# spring crossings (5-fragment arc trails) and SPELLBROS gauntlets
-		# (blob lines + their fragment arcs) are exempt like the void:
-		# their trails ARE the economy, not chunk clutter
+		# spring crossings (5-fragment arc trails) and the SPELLBROS sky
+		# (blob fields + their mana rain) are exempt like the void: their
+		# trails ARE the economy, not chunk clutter
 		_check(s["max_entities"] <= (3 if d >= TerrainSpawner.PHASE_RICH else 2) \
-				or s["voids"] > 0 or s["svoid"] > 0 or s["gaunt"] > 0,
+				or s["voids"] > 0 or s["svoid"] > 0 or s["sky"] > 0,
 				"entity budget at d=%d" % int(d))
 	# level/phase-shape expectations, derived from the constants so they
 	# stay valid while tuning configs
@@ -763,9 +779,13 @@ func _run_tests() -> void:
 	var mid := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 80)
 	_check(mid["enemies"] > 0 and mid["climbs"] == 0, "enemies live before climbs")
 	# FOUNDATIONS ends in the swarm zone (from PHASE_SWARM): densest enemies
-	# (enemies per ELIGIBLE chunk; climb waves carry none and dilute raw counts)
-	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 80)
-	_check(swarm["enemy_rate"] > mid["enemy_rate"], "swarms denser than early enemies")
+	# (enemies per ELIGIBLE chunk; climb waves carry none and dilute raw
+	# counts). Fixed bounds, not a cross-probe comparison — two random
+	# draws racing each other flakes; the means (~0.78 vs ~0.57) sit
+	# outside these by 2.5+ sd at 160 chunks.
+	var swarm := _probe(TerrainSpawner.PHASE_SWARM + 60.0, 160)
+	_check(swarm["enemy_rate"] > 0.65 and mid["enemy_rate"] < 0.75,
+			"swarms denser than early enemies")
 	# star spawns are rare (~2% of eligible chunks): 80-chunk samples rolled
 	# zero once in ~10 runs, so this check gets its own 400-chunk probe
 	var starb := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 400)
@@ -830,32 +850,30 @@ func _run_tests() -> void:
 	# EVERY deck opens with its left-edge beacon — a deck whose only light
 	# sat mid-deck read as a missing edge (Neven)
 	_check(umbrab["beacon"] == 80, "umbra decks always open with a beacon")
-	# SPELLBROS: UMBRA's skeleton — staircases, megas, plain gaps — but
-	# SATURATED with blobs: squatters on the stair steps, cramped walls
-	# on every deck, and a dense blob-ridden second storey of one-way
-	# platforms over the long gauntlets. It must read as impossible until
-	# the brother's burns click.
+	# SPELLBROS: after the entry runway the ground VANISHES — open sky
+	# saturated with floating blobs and a mana rain. Build + stomp + burn;
+	# it must read as impossible until the brother's burns click.
 	var brosb := _probe(Levels.start_m(Levels.BROS) + 50.0, 80)
-	_check(brosb["gaunt"] == 80 and brosb["bmega"] > 3 and brosb["bmega"] < 30,
-			"spellbros: blob decks with megas mixed in")
-	_check(brosb["climbs"] > 5, "spellbros staircases live (umbra structure)")
-	_check(brosb["sblob"] > 10, "spellbros staircases carry squatter blobs")
-	_check(brosb["blong"] > 4 and brosb["bshort"] > 10,
-			"spellbros mixes short pillars and long gauntlets")
-	_check(brosb["pads"] > 40, "spellbros air storeys are dense")
-	_check(brosb["stor"] >= 2, "spellbros stacks multiple storeys")
-	_check(brosb["pblob"] > 25, "spellbros air storeys carry blobs")
-	# regression floor, not the tune: typical samples run ~600 blobs per 80
-	# chunks, but climb-heavy / long-poor samples legitimately dip
-	_check(brosb["enemies"] > 300, "spellbros reads as impossible")
-	_check(brosb["sp_lo"] < 0.28 and brosb["sp_hi"] > 0.5,
-			"spellbros spacing cramped and chaotic")
-	# teach decks roll 1-3 blobs each (the wide-spacing fill can break on
-	# its first roll), so 80 chunks legitimately span ~130-230
-	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
-	_check(teach_bros["gaunt"] == 80 and teach_bros["bmega"] == 0
-			and teach_bros["enemies"] >= 100 and teach_bros["enemies"] <= 260,
-			"spellbros teach-in: short mild decks, no megas")
+	_check(brosb["sky"] == 80 and brosb["climbs"] == 0,
+			"spellbros: open sky — no ground, no stairs")
+	_check(brosb["enemies"] > 300, "spellbros sky reads as impossible")
+	# Neven's explicit ask: the player must come out ahead — fragment
+	# income alone (before stomp bounties) outpays the build demand
+	_check(brosb["mana"] >= brosb["builds"] * 1.2,
+			"spellbros economy: the mana rain outpays the builds")
+	_check(brosb["sp_lo"] < 0.25 and brosb["sp_hi"] > 0.38,
+			"spellbros blob field irregular")
+	# the sky teach-in (25-45 m): sparser field, no stacks, richer rain
+	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 35.0, 80)
+	_check(teach_bros["sky"] == 80 and teach_bros["enemies"] > 80
+			and teach_bros["enemies"] < 400,
+			"spellbros teach-in: gentler sky")
+	_check(teach_bros["mana"] >= teach_bros["builds"] * 1.2,
+			"spellbros teach-in economy holds")
+	# the entry runway (first ~25 m): the band's last ground, blob-free
+	var bros_run := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
+	_check(bros_run["brun"] == 80 and bros_run["enemies"] == 0,
+			"spellbros entry runway: calm ground")
 	# SPELLBROS wind-down: one long continuous calm floor before the void —
 	# no blobs, no megas, no steps (the audit flags any positive gap)
 	var bros_out := _probe(TerrainSpawner.PHASE_VOID - 20.0, 80)
@@ -914,7 +932,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
-	main.spawner.bros_mega_last = false
+	main.spawner.bros_line = 650.0
 	main.spawner.star_given = true  # showcase done; steady-state sampling
 	main.spawner.flip_on_floor = true
 	main.spawner.flip_strip_start = 0.0
@@ -922,9 +940,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "dfloor": 0, "dceil": 0,
-			"spring": 0, "svoid": 0, "gaunt": 0,
-			"blong": 0, "bshort": 0, "bmega": 0, "pads": 0, "gfrag": 0,
-			"sblob": 0, "pblob": 0, "sout": 0, "stor": 0,
+			"spring": 0, "svoid": 0, "sky": 0, "brun": 0, "gfrag": 0, "sout": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
@@ -970,8 +986,6 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["svoid"] += 1
 		if s.get("arc", false):
 			stats["arc"] += 1
-		if s.get("gkind", "") == "gaunt":
-			stats["gaunt"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		stats["max_top"] = maxf(stats["max_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
@@ -983,50 +997,24 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["void"]:
 			stats["builds"] += ceilf(s["gap"] / one_build)
 		elif s.get("bros", false):
-			if s.get("gkind", "") == "gaunt":
-				if s["climb"] != 0:
-					# staircases: up-steps one build each, down-steps easy
-					# drops — and their squatter blobs counted separately
-					if s["climb"] == -1:
-						stats["builds"] += 1.0
-					stats["sblob"] += s["blobs"]
-				else:
-					if s.get("mgap", false):
-						# a mega gap IS the build; one platform must bridge it
-						stats["builds"] += 1.0
-						if s["gap"] > one_build:
-							stats["bad"] += 1
-					else:
-						# plain gaps follow the standard reach rule
-						var bdisc: float = 1170.0 * 1170.0 - 6600.0 * s["rise"]
-						if bdisc < 0.0 or s["gap"] > v * (1170.0 + sqrt(bdisc)) / 3300.0:
-							stats["bad"] += 1
-					# the blob line: first blob clear of the entry landing,
-					# the cramped wall inside its bounds, and enough tail
-					# that the bounce off the LAST blob (0.663*v of carry)
-					# lands ON the deck, never in the next gap
-					if s["lead"] < 0.42 * v or s["lead"] > 0.75 * v:
-						stats["bad"] += 1
-					if s["tail"] < 0.66 * v:
-						stats["bad"] += 1
-					if s["blobs"] > 1:
-						if s["smin"] < 0.1 * v or s["smax"] > 0.85 * v:
-							stats["bad"] += 1
-						stats["sp_lo"] = minf(stats["sp_lo"], s["smin"] / v)
-						stats["sp_hi"] = maxf(stats["sp_hi"], s["smax"] / v)
-					if s.get("long", false):
-						stats["blong"] += 1
-					else:
-						stats["bshort"] += 1
-					if s.get("mgap", false):
-						stats["bmega"] += 1
-					# every storey stays hop-up-able from the one below
-					# (per-storey rise <= 185 < 207 max jump height)
-					stats["pads"] += s.get("pads", 0)
-					stats["pblob"] += s.get("pblobs", 0)
-					stats["stor"] = maxi(stats["stor"], int(s.get("storeys", 0)))
-					if s.get("pads", 0) > 0 and s.get("pad_rise", 0.0) > 195.0:
-						stats["bad"] += 1
+			if s.get("gkind", "") == "sky":
+				# open sky: built platforms are the only ground, so the
+				# segment demands ceil(L / one_build) of the pool — blobs
+				# are optional bounties, never required footing. The field
+				# must respect the death-ceiling margin (every blob at
+				# y >= 340: crown + bounce + refresh jump stays 40 px
+				# under the -90 kill line).
+				stats["sky"] += 1
+				stats["builds"] += ceilf(s["gap"] / one_build)
+				if s.get("min_by", 999.0) < 340.0:
+					stats["bad"] += 1
+				if s["blobs"] > 1:
+					stats["sp_lo"] = minf(stats["sp_lo"], s["smin"] / v)
+					stats["sp_hi"] = maxf(stats["sp_hi"], s["smax"] / v)
+			elif s.get("gkind", "") == "run":
+				stats["brun"] += 1
+				if s["gap"] > 0.68 * v:
+					stats["bad"] += 1  # entry runway: plain jumps
 			elif s["gap"] > 0.0:
 				stats["bad"] += 1  # wind-down: seamlessly overlapping floor
 		elif s.get("bridge", false):

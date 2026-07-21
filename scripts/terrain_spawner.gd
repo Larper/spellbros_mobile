@@ -39,7 +39,10 @@ const RUNWAY_M := 20.0
 ## SPELLBROS gets a LONGER hand-off (Neven: THE VOID must not appear
 ## until the blobs are gone and the ground has run long and calm) — the
 ## band is the game's loudest, so its exit breathes longer than 45 m.
+## BROS_GROUND_M: the band's entry runway — the last ground it shows
+## before the floor drops out and the sky fills with blobs.
 const BROS_OUT_M := 60.0
+const BROS_GROUND_M := 25.0
 
 ## Every level's first ~45 m (3-4 gaps) is a teach-in: the new mechanic in
 ## its gentlest form, no ambushes, before the band ramps to full intensity.
@@ -112,9 +115,8 @@ var flip_ceil_y := 0.0  # walkable face y of the last ceiling strip placed
 # when it reaches 0 the next chunk is a void crossing
 var spring_deck_left := 3
 
-# SPELLBROS rhythm state: megas never twice in a row (the pool can't
-# fund back-to-back crossing tolls)
-var bros_mega_last := false
+# SPELLBROS sky state: the height the floating blob field wanders around
+var bros_line := 650.0
 
 # Guaranteed star showcase (Neven): FOUNDATIONS must serve the double
 # jump between 110 and 150 m so it's met and understood before the
@@ -708,32 +710,31 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	}
 
 
-## SPELLBROS level (Neven's spec, round 6): UMBRA's structure, SATURATED
-## with blobs. The band must read as IMPOSSIBLE on first sight — "WTF" —
-## until the player realizes the brother is burning the wall away for
-## mana instead of letting them die. The skeleton is still the standard
-## generator's — plain gaps under the rise rule, mega gaps (one built
-## platform), climb staircases up and down — but now EVERYTHING is blob
-## country: the staircases carry squatters on their steps (round 5 left
-## them bare — Neven), every deck runs a cramped irregular wall
-## (spacings mostly 0.12-0.22*v), and LONG decks (~40%, 5-9*v) stack
-## 2-3 STOREYS of dense mid-air one-way platforms — most of them
-## blob-ridden too, some carrying a fragment or the band's star spot.
-## Stomp what lines up, let the brother burn what doesn't (1 mana each),
-## refill from the thick fragment arcs (some orange +3) and the stomp
-## bounties. Geometry guarantees: the first deck blob stays clear of the
-## entry landing, and every deck keeps >= 0.7*v of tail so the bounce
-## off its LAST blob (0.663*v of carry) lands ON deck, never in the
-## next gap. Teach-in: short mild decks — no megas, no stairs, no
-## floaters (the wall of the full band hits right after the banner).
+## SPELLBROS level (Neven's spec, round 8): THE GROUND VANISHES. After
+## ~25 m of entry runway the band is OPEN SKY — no pillars, no decks,
+## no staircases — filled with an irregular field of floating blobs
+## (BLOB BRIDGES' hovering crowns, but scattered: wandering line
+## height, jittered spacings and altitudes, some stacked verticals) and
+## a THICK rain of mana fragments. The band must read as IMPOSSIBLE —
+## "WTF" — until the reveal: the brother burns every lethal contact
+## for 1 mana. Traversal is the three verbs at once: BUILD a platform
+## to run from (1 mana), STOMP what lines up (bounce + refresh jump
+## + 1 mana bounty — blobs ARE income), and let the brother BURN what
+## doesn't (1 mana). The economy must stay net-positive: fragments ride
+## the inter-blob stomp arcs (some orange +3), and the audit asserts
+## fragment income alone outpays the build demand. Every blob stays at
+## y >= 340: crown + bounce + refresh jump tops out 40 px under the
+## band's death ceiling (see Main), so legit flight never clips it.
+## Teach-in: sparser blobs, richer fragments, no vertical stacks.
 func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	# wind-down into THE VOID (Neven: the endgame must not appear until
 	# the blobs are gone and the ground has run long and calm): the last
 	# BROS_OUT_M meters are ONE continuous floor of overlapping strips —
-	# no gaps, no blobs, no storeys — gliding down from wherever the band
-	# ended (stairs can leave it as high as 250) into the 780+ band, only
-	# ever stepping DOWN inside the overlap (a rise inside an overlap is
-	# a lip that stops the auto-runner: the FLIPSIDE runway lesson).
+	# no gaps, no blobs — catching the wizard out of the sky (last_top_y
+	# still holds the entry runway's 780-920 height, so the floor appears
+	# under the blob field) and only ever stepping DOWN inside the
+	# overlap (a rise inside an overlap is a lip that stops the
+	# auto-runner: the FLIPSIDE runway lesson).
 	if PHASE_VOID - d <= BROS_OUT_M:
 		climb_dir = 0
 		climb_steps_left = 0
@@ -757,184 +758,93 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 			"void": false, "pillar": false, "bros": true, "gkind": "out",
 			"blobs": 0, "pads": 0, "stars": 0, "rise": 0.0, "speed": v,
 		}
-	var teach := _is_teach(d)
-	if not teach:
-		_update_climb_state(d)
-	# staircases, straight from the standard generator (UMBRA's structure):
-	# up-steps rise beyond jump height and demand one build each — blob-free,
-	# stairs are about building — and down-steps are easy drops
-	if climb_dir != 0:
-		var sgap := rng.randf_range(150.0, 230.0 if climb_dir == -1 else 240.0)
-		var sw := rng.randf_range(320.0, 480.0) if climb_dir == -1 \
-				else rng.randf_range(360.0, 520.0)
-		var sdy := -rng.randf_range(240.0, 300.0) if climb_dir == -1 \
-				else rng.randf_range(200.0, 280.0)
-		if climb_dir == -1:
-			climb_steps_left -= 1
-		var s_y := clampf(last_top_y + sdy, SKY_Y_MIN, BASE_Y_MAX)
-		var sx := next_x + sgap
-		_place_chunk(sx, s_y, sw)
-		# the stairs are blob country too (round 5 left them bare — Neven):
-		# most steps carry a patrolling squatter right where the build
-		# lands — stomp it on arrival or pay the brother a fragment
-		var sblobs := 0
-		if rng.randf() < 0.75:
-			sblobs = 1
-			var sb := SpikeBlob.new(sx + 60.0, sx + sw - 60.0)
-			sb.position = Vector2(sx + rng.randf_range(90.0, sw - 90.0), s_y - 30.0)
-			sb.speed = enemy_speed_for(d)
-			add_child(sb)
-		var s_used := sblobs
-		if rng.randf() < MANA_CHANCE_CLIMB:
-			_place_coin(Vector2(sx + rng.randf_range(80.0, sw - 80.0), s_y - 60.0))
-			s_used += 1
-		var s_rise := maxf(0.0, last_top_y - s_y)
-		next_x = sx + sw
-		last_top_y = s_y
+	# entry runway (~25 m): the last ground the band shows — plain calm
+	# decks while the banner lands and the brother fades in overhead.
+	# No blobs: the WTF wall must hit as one picture, not trickle in.
+	if d - Levels.start_m(Levels.BROS) < BROS_GROUND_M:
+		var rgap := rng.randf_range(0.36, 0.44) * v
+		var rw := rng.randf_range(1.2, 1.8) * v
+		var r_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
+		var rx := next_x + rgap
+		_place_chunk(rx, r_y, rw)
+		var r_used := 0
+		if rng.randf() < 0.5:
+			_place_coin(Vector2(rx + rng.randf_range(80.0, rw - 80.0), r_y - 60.0))
+			r_used = 1
+		var r_rise := maxf(0.0, last_top_y - r_y)
+		next_x = rx + rw
+		last_top_y = r_y
 		return {
-			"gap": sgap, "width": sw, "top_y": s_y, "mega": false,
-			"enemies": sblobs, "entities": s_used, "climb": climb_dir,
-			"void": false, "pillar": false, "bros": true, "gkind": "gaunt",
-			"blobs": sblobs, "pads": 0, "stars": 0, "rise": s_rise, "speed": v,
+			"gap": rgap, "width": rw, "top_y": r_y, "mega": false,
+			"enemies": 0, "entities": r_used, "climb": 0,
+			"void": false, "pillar": false, "bros": true, "gkind": "run",
+			"blobs": 0, "stars": 0, "rise": r_rise, "speed": v,
 		}
-	# the gap: standard-rule plain jump, or a mega demanding one built
-	# platform — never two megas in a row, none in the teach-in
-	var mega_gap: bool = not teach and not bros_mega_last and rng.randf() < 0.3
-	bros_mega_last = mega_gap
-	var gap: float
-	var dy: float
-	if mega_gap:
-		gap = rng.randf_range(0.95, 1.25) * v
-		dy = rng.randf_range(-40.0, 160.0)
-	else:
-		gap = rng.randf_range(GAP_MIN_FRAC, 0.5 if teach else GAP_MAX_FRAC) * v
-		# the standard rise rule: wide gaps never land higher
-		dy = rng.randf_range(0.0 if gap > GAP_RISE_FRAC * v else -GAP_MAX_RISE, 170.0)
-	if teach:
-		dy = rng.randf_range(-40.0, 40.0)
-	var top_y := clampf(last_top_y + dy, BASE_Y_MIN, 940.0)
-	if mega_gap:
-		# the reward for paying the crossing toll hangs over the emptiness
-		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
-	# the deck: short pillars or long gauntlets, ~40% long. A long deck
-	# (up to 9*v = 81 m) must never carry its wall into the calm floor,
-	# so it needs 90 m of room before the wind-down window opens.
-	var long_deck: bool = not teach and rng.randf() < 0.4 \
-			and PHASE_VOID - BROS_OUT_M - d > 90.0
-	var w: float
-	if teach:
-		w = rng.randf_range(2.0, 2.6) * v
-	elif long_deck:
-		w = rng.randf_range(5.0, 9.0) * v
-	else:
-		w = rng.randf_range(1.2, 1.7) * v
-	var lead := minf(rng.randf_range(0.5, 0.7) * v, w - 0.7 * v)
-	var x := next_x + gap
-	_place_chunk(x, top_y, w)
+	# THE SKY: a segment of open air. The blob field rides a wandering
+	# line (clamped 450-800: with ±110 jitter no blob tops y 340, the
+	# death-ceiling guarantee), spacings and altitudes jittered so no
+	# bounce rhythm survives, ~30% of crowns stacking a vertical partner.
+	var teach := _is_teach(d)
+	var L := rng.randf_range(1.0, 1.8) * v
+	bros_line = clampf(bros_line + rng.randf_range(-160.0, 160.0), 450.0, 800.0)
 	var espeed := enemy_speed_for(d)
-	# THE AIR IS FULL over long decks: 2-3 STOREYS of dense one-way
-	# platforms, each 150-185 px above the one below (hop-up-able:
-	# < 207 max jump) and blob-ridden like the deck itself. One storey
-	# was cheesable (Neven: build a private lane right above it and run
-	# the whole band untouched) — now every buildable lane inside the
-	# static frame is already blob country, and above the top storey the
-	# wizard flies blind over the camera. Blob-free pads pay a fragment
-	# or the band's one easy-to-take star spot instead.
-	var pads := 0
-	var pblobs := 0
-	var pad_rise := 0.0
-	var storeys := 0
-	var pad_spans: Array = []
-	var pu := 0
-	var coins := 0
-	if long_deck:
-		var base := top_y
-		for st in range(2 + (1 if rng.randf() < 0.5 else 0)):
-			var pr := rng.randf_range(150.0, 185.0)
-			var lvl_y := base - pr
-			if lvl_y < 320.0:
-				break  # stay inside the static frame (view top is 188)
-			storeys += 1
-			pad_rise = maxf(pad_rise, pr)
-			var px := rng.randf_range(0.4, 0.9) * v
-			while px + 0.5 * v < w - 0.5 * v:
-				var pw := rng.randf_range(0.42, 0.6) * v
-				_place_float(x + px, lvl_y, pw)
-				if st == 0:
-					# only the first storey shadows the deck's coin arcs
-					pad_spans.append([px, px + pw])
-				pads += 1
-				if rng.randf() < 0.7:
-					pblobs += 1
-					var pb := SpikeBlob.new(x + px + 50.0, x + px + pw - 50.0)
-					pb.position = Vector2(x + px + pw * 0.5, lvl_y - 30.0)
-					pb.speed = espeed
-					add_child(pb)
-				elif pu == 0 and rng.randf() < 0.2:
-					pu = _maybe_star(x + px, pw, lvl_y, 1.0)
-				else:
-					_place_coin(Vector2(x + px + pw * 0.5, lvl_y - 60.0))
-					coins += 1
-				px += pw + rng.randf_range(0.35, 0.7) * v
-			base = lvl_y
-	# the blob line: fill the deck, keeping the landable tail free
-	var bxs: Array = [lead]
-	while true:
-		var sp: float
-		if teach:
-			sp = rng.randf_range(0.5, 0.8) * v
-		else:
-			var r := rng.randf()
-			if r < 0.75:
-				sp = rng.randf_range(0.12, 0.22) * v  # the cramped wall
-			elif r < 0.92:
-				sp = rng.randf_range(0.25, 0.42) * v
-			else:
-				sp = rng.randf_range(0.5, 0.7) * v  # a rare breather
-		if bxs[bxs.size() - 1] + sp > w - 0.7 * v:
-			break
-		bxs.append(bxs[bxs.size() - 1] + sp)
-	var k := bxs.size()
+	var xs: Array = []
+	var bys: Array = []
+	var cx := rng.randf_range(0.15, 0.3) * v
+	while cx < L - 0.1 * v:
+		xs.append(cx)
+		bys.append(bros_line + rng.randf_range(-110.0, 110.0))
+		cx += (rng.randf_range(0.35, 0.7) if teach else rng.randf_range(0.18, 0.45)) * v
+	var k := 0
 	var smin := 0.0
 	var smax := 0.0
-	for i in range(k):
-		var bx: float = x + bxs[i]
+	var min_by := 999.0
+	for i in range(xs.size()):
+		var bx: float = next_x + xs[i]
+		var by: float = bys[i]
 		var b := SpikeBlob.new(bx - 40.0, bx + 40.0)
-		b.position = Vector2(bx, top_y - 30.0)
+		b.position = Vector2(bx, by)
 		b.speed = espeed
 		add_child(b)
+		k += 1
+		min_by = minf(min_by, by)
 		if i > 0:
-			var sp: float = bxs[i] - bxs[i - 1]
+			var sp: float = xs[i] - xs[i - 1]
 			smin = sp if smin == 0.0 else minf(smin, sp)
 			smax = maxf(smax, sp)
-	for i in range(k - 1):
-		# thick arcs: burning through the wall costs, so the wall pays
-		if rng.randf() < 0.45:
-			var cx: float = (bxs[i] + bxs[i + 1]) * 0.5
-			# never under a floater: a fragment at deck-200 inside a pad's
-			# span visually collides with the slab hanging at deck~175
-			var covered := false
-			for span: Array in pad_spans:
-				if cx >= span[0] and cx <= span[1]:
-					covered = true
-					break
-			if covered:
-				continue
-			var amt := 3 if rng.randf() < 0.22 else 1
-			_place_coin(Vector2(x + cx, top_y - 200.0), amt)
+		# vertical stacks thicken the wall (never in the teach-in); the
+		# upper partner keeps the y >= 360 ceiling margin
+		if not teach and rng.randf() < 0.3:
+			var dv := rng.randf_range(170.0, 260.0)
+			var by2: float = by - dv if by - dv >= 360.0 and rng.randf() < 0.5 \
+					else minf(by + dv, 880.0)
+			var b2 := SpikeBlob.new(bx - 40.0, bx + 40.0)
+			b2.position = Vector2(bx, by2)
+			b2.speed = espeed
+			add_child(b2)
+			k += 1
+			min_by = minf(min_by, by2)
+	# the mana rain (Neven: he MUST come out ahead): a fragment rides
+	# most inter-blob stomp arcs, some orange +3, plus strays — richer
+	# through the teach-in while the verbs are still being learned
+	var coins := 0
+	for i in range(xs.size() - 1):
+		if rng.randf() < (0.8 if teach else 0.6):
+			var fy: float = minf(bys[i], bys[i + 1]) - rng.randf_range(130.0, 180.0)
+			_place_coin(Vector2(next_x + (xs[i] + xs[i + 1]) * 0.5, maxf(fy, 360.0)),
+					3 if not teach and rng.randf() < 0.2 else 1)
 			coins += 1
-	var rise := maxf(0.0, last_top_y - top_y)
-	next_x = x + w
-	last_top_y = top_y
+	if rng.randf() < 0.5:
+		_place_coin(Vector2(next_x + rng.randf_range(0.2, 0.8) * L,
+				clampf(bros_line + rng.randf_range(-200.0, 60.0), 360.0, 860.0)))
+		coins += 1
+	next_x += L
 	return {
-		"gap": gap, "width": w, "top_y": top_y, "mega": mega_gap,
-		"enemies": k + pblobs,
-		"entities": k + pblobs + coins + pu + (1 if mega_gap else 0),
-		"climb": 0, "void": false, "pillar": false, "bros": true,
-		"gkind": "gaunt", "mgap": mega_gap, "long": long_deck, "blobs": k,
-		"pads": pads, "pblobs": pblobs, "pad_rise": pad_rise, "storeys": storeys,
-		"lead": lead, "smin": smin, "smax": smax, "tail": w - bxs[k - 1],
-		"stars": pu, "rise": rise, "speed": v,
+		"gap": L, "width": 0.0, "top_y": bros_line, "mega": false,
+		"enemies": k, "entities": k + coins, "climb": 0,
+		"void": false, "pillar": false, "bros": true, "gkind": "sky",
+		"blobs": k, "smin": smin, "smax": smax, "min_by": min_by,
+		"stars": 0, "rise": 0.0, "speed": v,
 	}
 
 
@@ -1024,15 +934,6 @@ func _place_ceiling(x: float, ceil_y: float, w: float) -> void:
 	var chunk := GroundChunk.new(w)
 	chunk.ceiling = true
 	chunk.position = Vector2(x, ceil_y - GroundChunk.THICK)
-	add_child(chunk)
-
-
-## Thin one-way slab hovering over a long SPELLBROS deck: jump or stomp-
-## bounce up THROUGH it, land on top, run a blob-free stretch, drop off
-## the end back into the wall.
-func _place_float(x: float, top_y: float, w: float) -> void:
-	var chunk := GroundChunk.new(w, 26.0, true)
-	chunk.position = Vector2(x, top_y)
 	add_child(chunk)
 
 
