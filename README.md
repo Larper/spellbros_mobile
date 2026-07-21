@@ -1,17 +1,41 @@
-# Everyday Run
+# Everyday Life
 
 An endless runner-builder for phones: an auto-running commuter, one finger,
 and an ordinary day that only stays on track because you build the next step.
 Coffee restores energy, notifications get stomped, plans flip upside down,
 friends help, and the workday eventually disappears into open space.
 
-![Everyday Run gameplay](docs/everyday-run-preview.png)
+![Everyday Life hero art](docs/devpost/01-everyday-life-hero.png)
 
-**Play it:** https://spellbros.neven.one (best on a phone, landscape)
+**Play it:** https://everydaylife.neven.one (best on a phone, landscape)
 
 Built in **Godot 4.7**, code-first: one scene ([scenes/main.tscn](scenes/main.tscn)),
-every node created in GDScript, all art drawn in `_draw()`, all audio
-procedurally synthesized. Zero asset files.
+every gameplay node created in GDScript, all in-game art drawn in `_draw()`,
+and all music and sound effects procedurally synthesized at runtime. The game
+does not depend on imported sprite sheets, music tracks, or sound-effect files.
+
+## How it was built
+
+I started by vibe-coding a simple mobile platformer prototype with Claude and
+then developed its movement, procedural level generation, collision, energy
+economy, difficulty bands, level persistence, and beatability tests on the
+`levels` branch. For the hackathon pass, I kept that functionality intact and
+used **Codex powered by GPT-5.6** on the `Codex` branch to turn it into
+*Everyday Life*.
+
+| Layer | How I built it |
+|---|---|
+| Engine | Godot 4.7 using a single `.tscn` scene and code-created nodes |
+| Gameplay | GDScript auto-running, jumping, step-building, collision, pickups, enemies, camera pressure, and saved level progress |
+| Levels | Seeded procedural chunks with live-speed jump math and seven mechanic-focused distance bands |
+| Graphics | `CanvasItem._draw()` primitives and code-generated colors, shapes, auras, lights, buildings, windows, characters, pickups, and notifications |
+| Audio | Procedurally generated `AudioStreamWAV` music and sound effects, including the lo-fi city groove and notification-dismiss chime |
+| Testing | A headless Godot smoke suite plus sampled gap and chunk beatability audits |
+| Delivery | A single-threaded Godot Web export deployed through cPanel to `everydaylife.neven.one` |
+
+This code-first approach meant the same GDScript that defines each mechanic
+also defines how it looks and sounds. It made the retheme possible without
+rewriting the underlying game loop.
 
 ## How it plays
 
@@ -86,16 +110,25 @@ spawn ~27 m ahead). It opens with a safe runway and two coffee pickups, then:
 | 1500 | Friends | a contact avatar can dismiss one lethal interruption for 1 energy |
 | 1800 | Off the Clock | ground vanishes into the original open-space endgame |
 
+![Everyday Life level progression](docs/devpost/03-everyday-life-seven-levels.png)
+
 The headless test suite audits every phase band for **beatability**: 80 sampled
 chunks per band, every gap checked against the jump-reach math, zero unbeatable
 chunks tolerated.
 
-## Visual and audio pass with Codex + GPT-5.6
+## How I used Codex and GPT-5.6
+
+I supplied the creative direction: the ironic *Everyday Life* title, the trip
+to work and back, doomscrolling and notification distractions, coffee as
+energy, and the friend who throws a beer at an incoming notification. Codex
+with GPT-5.6 inspected the existing Godot project, proposed implementation
+options, edited the GDScript, ran the tests, reviewed screenshots with me, and
+iterated from my feedback.
 
 The complete gameplay implementation on the `levels` branch was preserved:
 movement, controls, procedural generation, collision, difficulty, economy,
-level boundaries, persistence, and tests are unchanged. On the `Codex` branch,
-GPT-5.6 in Codex was used specifically for the presentation pass:
+level boundaries, persistence, and tests. On the `Codex` branch, Codex and
+GPT-5.6 were used to:
 
 - redrew the wizard as a commuter with a backpack, phone, jacket, and sneakers;
 - turned terrain into windowed city blocks and built platforms into temporary
@@ -106,11 +139,19 @@ GPT-5.6 in Codex was used specifically for the presentation pass:
   night-walk, and evening city colors while preserving the darkness mechanic;
 - synthesized a new eight-bar 112 BPM lo-fi city groove plus new jump, coffee,
   build, notification, failure, and launch sounds entirely in code;
-- updated the HUD, level names, application icon, and project copy; and
-- kept the original smoke/beatability suite green after the reskin.
+- updated the HUD, level names, application icon, and project copy;
+- fixed presentation bugs such as clipped building windows and roofs, unclear
+  pickups, and missing Focus Mode and Double Jump held-state visuals;
+- created the Devpost thumbnail, asset board, and level-progression artwork
+  from the real game visuals; and
+- ran the original smoke/beatability suite after the reskin, prepared the Web
+  build, pushed the `Codex` branch, and deployed it through cPanel.
+
+![Everyday Life asset showcase](docs/devpost/02-everyday-life-asset-showcase.png)
 
 The shipped game has no AI runtime and needs no network or API credits; Codex
-and GPT-5.6 were development tools used to create this new presentation layer.
+and GPT-5.6 were development tools. All movement, procedural generation,
+rendering, audio synthesis, and game logic execute locally inside Godot.
 
 ## Development
 
@@ -124,7 +165,7 @@ godot --headless --path . -s res://tests/smoke_test.gd
 # after adding a new class_name script
 godot --headless --path . --import
 
-# deploy to https://spellbros.neven.one (exports Web preset, uploads via cPanel API)
+# deploy to https://everydaylife.neven.one (exports Web preset, uploads via cPanel API)
 powershell -File deploy.ps1
 ```
 
