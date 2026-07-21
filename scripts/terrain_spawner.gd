@@ -36,6 +36,10 @@ const FLIP_DEAD_CHANCE := 0.25  # dead zones: both surfaces gone, build to cross
 ## flip is ever asked for.
 const WIND_DOWN_M := 45.0
 const RUNWAY_M := 20.0
+## SPELLBROS gets a LONGER hand-off (Neven: THE VOID must not appear
+## until the blobs are gone and the ground has run long and calm) — the
+## band is the game's loudest, so its exit breathes longer than 45 m.
+const BROS_OUT_M := 60.0
 
 ## Every level's first ~45 m (3-4 gaps) is a teach-in: the new mechanic in
 ## its gentlest form, no ambushes, before the band ramps to full intensity.
@@ -723,27 +727,35 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 ## next gap. Teach-in: short mild decks — no megas, no stairs, no
 ## floaters (the wall of the full band hits right after the banner).
 func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
-	# wind-down into THE VOID: plain calm hops, nothing left to burn
-	if PHASE_VOID - d <= WIND_DOWN_M:
+	# wind-down into THE VOID (Neven: the endgame must not appear until
+	# the blobs are gone and the ground has run long and calm): the last
+	# BROS_OUT_M meters are ONE continuous floor of overlapping strips —
+	# no gaps, no blobs, no storeys — gliding down from wherever the band
+	# ended (stairs can leave it as high as 250) into the 780+ band, only
+	# ever stepping DOWN inside the overlap (a rise inside an overlap is
+	# a lip that stops the auto-runner: the FLIPSIDE runway lesson).
+	if PHASE_VOID - d <= BROS_OUT_M:
 		climb_dir = 0
 		climb_steps_left = 0
-		var out_gap := rng.randf_range(0.36, 0.46) * v
-		var out_w := rng.randf_range(500.0, 700.0)
-		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
-		var out_x := next_x + out_gap
-		_place_chunk(out_x, out_y, out_w)
+		var start := next_x - 0.2 * v
+		var out_w := (next_x - start) + rng.randf_range(0.9 * v, 1.2 * v)
+		var dy := rng.randf_range(110.0, 150.0) if last_top_y < 770.0 else 0.0
+		var out_y := clampf(last_top_y + dy, 250.0, 920.0)
+		_place_chunk(start, out_y, out_w)
 		var out_used := 0
 		if rng.randf() < 0.4:
-			_place_coin(Vector2(out_x + rng.randf_range(80.0, out_w - 80.0), out_y - 60.0))
+			_place_coin(Vector2(start + out_w * 0.6, out_y - 60.0))
 			out_used = 1
-		var out_rise := maxf(0.0, last_top_y - out_y)
-		next_x = out_x + out_w
+		# the endgame's fragment trail picks up where this floor leaves off
+		void_y = clampf(out_y - 120.0, 340.0, 800.0)
+		var out_gap := start - next_x  # negative: strips overlap seamlessly
+		next_x = start + out_w
 		last_top_y = out_y
 		return {
 			"gap": out_gap, "width": out_w, "top_y": out_y, "mega": false,
 			"enemies": 0, "entities": out_used, "climb": 0,
 			"void": false, "pillar": false, "bros": true, "gkind": "out",
-			"blobs": 0, "pads": 0, "stars": 0, "rise": out_rise, "speed": v,
+			"blobs": 0, "pads": 0, "stars": 0, "rise": 0.0, "speed": v,
 		}
 	var teach := _is_teach(d)
 	if not teach:
@@ -804,8 +816,11 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	if mega_gap:
 		# the reward for paying the crossing toll hangs over the emptiness
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
-	# the deck: short pillars or long gauntlets, ~40% long
-	var long_deck: bool = not teach and rng.randf() < 0.4
+	# the deck: short pillars or long gauntlets, ~40% long. A long deck
+	# (up to 9*v = 81 m) must never carry its wall into the calm floor,
+	# so it needs 90 m of room before the wind-down window opens.
+	var long_deck: bool = not teach and rng.randf() < 0.4 \
+			and PHASE_VOID - BROS_OUT_M - d > 90.0
 	var w: float
 	if teach:
 		w = rng.randf_range(2.0, 2.6) * v

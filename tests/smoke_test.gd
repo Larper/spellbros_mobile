@@ -856,8 +856,12 @@ func _run_tests() -> void:
 	_check(teach_bros["gaunt"] == 80 and teach_bros["bmega"] == 0
 			and teach_bros["enemies"] >= 100 and teach_bros["enemies"] <= 260,
 			"spellbros teach-in: short mild decks, no megas")
+	# SPELLBROS wind-down: one long continuous calm floor before the void —
+	# no blobs, no megas, no steps (the audit flags any positive gap)
 	var bros_out := _probe(TerrainSpawner.PHASE_VOID - 20.0, 80)
-	_check(bros_out["enemies"] == 0 and bros_out["mega"] == 0, "spellbros wind-down calm")
+	_check(bros_out["enemies"] == 0 and bros_out["mega"] == 0
+			and bros_out["min_top"] == bros_out["max_top"],
+			"spellbros wind-down: continuous calm floor")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
 	# shields NEVER spawn (Neven: a held shield intercepts a lethal touch
@@ -1023,8 +1027,8 @@ func _probe(d: float, n: int) -> Dictionary:
 					stats["stor"] = maxi(stats["stor"], int(s.get("storeys", 0)))
 					if s.get("pads", 0) > 0 and s.get("pad_rise", 0.0) > 195.0:
 						stats["bad"] += 1
-			elif s["gap"] > 0.68 * v:
-				stats["bad"] += 1  # wind-down: plain jumps
+			elif s["gap"] > 0.0:
+				stats["bad"] += 1  # wind-down: seamlessly overlapping floor
 		elif s.get("bridge", false):
 			if s.get("bkind", "blob") == "out":
 				# blob-free wind-down: a plain jump must clear it
