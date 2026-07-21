@@ -610,17 +610,16 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	}
 
 
-## SPELLBROS level (Neven's spec, round 2): the crimson brother overhead
-## burns the blob ahead for 1 mana each, so the band is LONG GAUNTLET
-## decks lined with blobs, split by blob-free mega crossings that drain
-## the pool the other way (a built platform). The gauntlet geometry is
-## the same chain math as BLOB BRIDGES, so a dry pool is stomped through:
-##   first blob 0.65*v past the takeoff edge (a deck-level crown sits
-##     ~62 px up: the tap-at-the-edge jump falls through it there);
-##   blobs 0.6*v apart — one passive bounce, auto-chain;
-##   tail 0.72-0.85*v — the last bounce (0.663*v of carry) lands ON deck.
-## Fragment arcs hover at the bounce-apex midpoints (deck - 200), some
-## orange +3: farming the line by hand is how the burn pool refills.
+## SPELLBROS level (Neven's spec, round 3): the crimson brother overhead
+## burns a killing blob for 1 mana, so the band is LONG GAUNTLET decks
+## littered with blobs at IRREGULAR spacing. Round 2 pinned the blobs to
+## the 0.6*v bounce carry — the exact BLOB BRIDGES chain — and the whole
+## band fell to mindless jump-stomping. Now spacings are drawn from a wide
+## band around the chain window and the patrols drift wide at uneven
+## speeds, so the line is chaos: stomp what happens to line up, let the
+## brother burn what doesn't, and refill the pool from the fragment arcs
+## overhead (some orange +3). Blob-free mega crossings still drain the
+## pool the other way (a built platform).
 func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	# wind-down into THE VOID: plain calm hops, nothing left to burn
 	if PHASE_VOID - d <= WIND_DOWN_M:
@@ -660,26 +659,47 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 			"void": false, "pillar": false, "bros": true, "gkind": "gmega",
 			"blobs": 0, "stars": 0, "rise": mrise, "speed": v,
 		}
-	# gauntlet deck: the blob line, teach-ins keep it short
-	var k := 2 if teach else 2 + rng.randi() % 3
+	# gauntlet deck: a LONG platform and the chaotic blob line. Teach-ins
+	# keep it short and mild; the full band packs 3-6 blobs whose spacings
+	# straddle the 0.6*v auto-chain (0.3*v drops you SHORT of the next
+	# crown, 1.0*v strands you on deck between them) — reading the line
+	# beats muscle memory, and what can't be dodged is what the burns are
+	# for. The first blob stays clear of the entry landing (>= 0.6*v past
+	# the takeoff edge) and the tail still catches a last bounce on deck.
+	var k := 2 if teach else 3 + rng.randi() % 4
 	var gap := rng.randf_range(0.40, 0.52) * v
-	var lead := 0.65 * v - gap
-	var tail := rng.randf_range(0.72, 0.85) * v
-	var w := lead + 0.6 * v * float(k - 1) + tail
+	var lead := (0.65 if teach else rng.randf_range(0.6, 0.9)) * v - gap
+	var bxs: Array = [lead]
+	for i in range(k - 1):
+		var sp := (rng.randf_range(0.5, 0.8) if teach else rng.randf_range(0.3, 1.0)) * v
+		bxs.append(bxs[i] + sp)
+	var tail := rng.randf_range(0.72, 1.0) * v
+	var w: float = bxs[k - 1] + tail
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
 	var espeed := enemy_speed_for(d)
+	var smin := 9.0 * v
+	var smax := 0.0
 	for i in range(k):
-		var bx: float = x + lead + 0.6 * v * float(i)
-		var b := SpikeBlob.new(bx - 40.0, bx + 40.0)
+		var bx: float = x + bxs[i]
+		# patrols drift as wide as the local elbow room allows (never into a
+		# neighbor's lane or off the deck) at uneven speeds: the same deck
+		# never plays twice
+		var room_l: float = bxs[i] if i == 0 else bxs[i] - bxs[i - 1]
+		var room_r: float = (w - bxs[i]) if i == k - 1 else bxs[i + 1] - bxs[i]
+		var r := clampf(minf(room_l, room_r) * 0.4, 40.0, 140.0)
+		var b := SpikeBlob.new(bx - r, bx + r)
 		b.position = Vector2(bx, top_y - 30.0)
-		b.speed = espeed
+		b.speed = espeed * rng.randf_range(0.8, 1.25)
 		add_child(b)
+		if i > 0:
+			smin = minf(smin, bxs[i] - bxs[i - 1])
+			smax = maxf(smax, bxs[i] - bxs[i - 1])
 	var coins := 0
 	for i in range(k - 1):
 		if rng.randf() < 0.65:
 			var amt := 3 if rng.randf() < 0.18 else 1
-			_place_coin(Vector2(x + lead + 0.6 * v * (float(i) + 0.5), top_y - 200.0), amt)
+			_place_coin(Vector2(x + (bxs[i] + bxs[i + 1]) * 0.5, top_y - 200.0), amt)
 			coins += 1
 	var rise := maxf(0.0, last_top_y - top_y)
 	next_x = x + w
@@ -688,8 +708,8 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 		"gap": gap, "width": w, "top_y": top_y, "mega": false,
 		"enemies": k, "entities": k + coins, "climb": 0,
 		"void": false, "pillar": false, "bros": true, "gkind": "gaunt",
-		"blobs": k, "b1": gap + lead, "bsp": 0.6 * v, "tail": tail,
-		"stars": 0, "rise": rise, "speed": v,
+		"blobs": k, "b1": gap + lead, "smin": smin, "smax": smax,
+		"tail": tail, "stars": 0, "rise": rise, "speed": v,
 	}
 
 

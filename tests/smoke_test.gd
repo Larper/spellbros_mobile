@@ -735,11 +735,13 @@ func _run_tests() -> void:
 	var umbrab := _probe(Levels.start_m(Levels.UMBRA) + 100.0, 80)
 	_check(umbrab["mana"] >= 0.8, "umbra runs rich in fragments")
 	# SPELLBROS: gauntlet decks dominate, mega crossings mix in, and the
-	# chain geometry is exact so a dry-mana gauntlet stays stompable
+	# blob line is CHAOS by construction — across the sample the spacings
+	# must straddle both sides of the 0.6*v auto-chain window, never
+	# collapse onto it (that's how the band got stomp-cheesed)
 	var brosb := _probe(Levels.start_m(Levels.BROS) + 50.0, 80)
 	_check(brosb["gaunt"] > 40 and brosb["gmega"] > 5, "spellbros band mix")
-	_check(brosb["enemies"] > 120 and brosb["b1err"] < 0.5 and brosb["bsperr"] < 0.5,
-			"spellbros gauntlet chains")
+	_check(brosb["enemies"] > 180, "spellbros gauntlets run thick with blobs")
+	_check(brosb["sp_lo"] < 0.45 and brosb["sp_hi"] > 0.8, "spellbros spacing is chaotic")
 	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
 	_check(teach_bros["gaunt"] == 80 and teach_bros["enemies"] == 160,
 			"spellbros teach-in: short gauntlets")
@@ -793,6 +795,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"dead": 0, "spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
+			"sp_lo": 9.0, "sp_hi": 0.0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -850,13 +853,18 @@ func _probe(d: float, n: int) -> Dictionary:
 			elif s["gap"] > 0.68 * v:
 				stats["bad"] += 1  # gauntlet entries / wind-down: plain jumps
 			if s.get("gkind", "") == "gaunt":
-				# the chain: first blob one edge-jump out (0.65*v to a
-				# deck-level crown), 0.6*v spacing (one passive bounce),
-				# and a tail that catches the last bounce's 0.663*v carry
-				stats["b1err"] = maxf(stats["b1err"], absf(s["b1"] - 0.65 * v))
-				stats["bsperr"] = maxf(stats["bsperr"], absf(s["bsp"] - 0.6 * v))
-				if s["tail"] < 0.71 * v or s["tail"] > 0.9 * v:
+				# irregular gauntlet: the first blob stays clear of the entry
+				# landing, spacings live inside the chaos band (NOT pinned to
+				# the 0.6*v auto-chain — that cheesed the whole level), and
+				# the tail still catches a last bounce on deck
+				if s["b1"] < 0.58 * v or s["b1"] > 0.92 * v:
 					stats["bad"] += 1
+				if s["smin"] < 0.28 * v or s["smax"] > 1.02 * v:
+					stats["bad"] += 1
+				if s["tail"] < 0.71 * v or s["tail"] > 1.02 * v:
+					stats["bad"] += 1
+				stats["sp_lo"] = minf(stats["sp_lo"], s["smin"] / v)
+				stats["sp_hi"] = maxf(stats["sp_hi"], s["smax"] / v)
 		elif s.get("bridge", false):
 			if s.get("bkind", "blob") == "out":
 				# blob-free wind-down: a plain jump must clear it
