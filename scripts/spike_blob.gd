@@ -91,7 +91,7 @@ func _lethal(p: Player) -> void:
 		p.break_shield()
 		if main:
 			main.audio.play("squish")
-			main.float_text(global_position, "SHIELD SPENT", Color("b98cff"))
+			main.float_text(global_position, "FOCUS BROKEN", Color("7bd5d6"))
 		_pop()
 		return
 	if main and main.bro and main.bro.try_guard(global_position):
@@ -126,10 +126,42 @@ func _draw() -> void:
 	var squish := 1.0 + sin(t * 6.0) * 0.06
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(2.0 - squish, squish))
 	# soft warning glow, then the body — circles only
-	draw_circle(Vector2.ZERO, 36.0, Color(1.0, 0.33, 0.47, 0.16))
-	draw_circle(Vector2.ZERO, 30.0, Color("ff5577"))
-	# eyes, front-facing
-	draw_circle(Vector2(-9, -4), 6.0, Color.WHITE)
-	draw_circle(Vector2(9, -4), 6.0, Color.WHITE)
-	draw_circle(Vector2(-9, -4), 3.0, Color("1c1430"))
-	draw_circle(Vector2(9, -4), 3.0, Color("1c1430"))
+	# Full notification toast: message card, chat icon, preview lines and unread
+	# counter. Everything stays inside the original 32 px collision footprint.
+	draw_circle(Vector2.ZERO, 41.0, Color(1.0, 0.28, 0.25, 0.14))
+	# Mobile-safe bevelled cards: the renderer dropped circles drawn after
+	# rectangles, hiding the app glyph, rounded corners and unread badge.
+	var shadow := PackedVector2Array([
+		Vector2(-23, -29), Vector2(27, -29), Vector2(37, -19),
+		Vector2(37, 21), Vector2(27, 31), Vector2(-23, 31),
+		Vector2(-35, 19), Vector2(-35, -17),
+	])
+	draw_colored_polygon(shadow, Color(0.03, 0.08, 0.12, 0.30))
+	var card := Color("fff7e8")
+	var card_points := PackedVector2Array([
+		Vector2(-23, -27), Vector2(23, -27), Vector2(32, -18),
+		Vector2(32, 18), Vector2(23, 27), Vector2(-23, 27),
+		Vector2(-32, 18), Vector2(-32, -18),
+	])
+	draw_colored_polygon(card_points, card)
+	# chat app glyph and two message-preview lines
+	draw_colored_polygon(_disc(Vector2(-18, -2), 11.0, 12), Color("3a9fb2"))
+	draw_rect(Rect2(-24, -7, 12, 9), Color.WHITE)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-22, 1), Vector2(-20, 8), Vector2(-15, 2),
+	]), Color.WHITE)
+	draw_rect(Rect2(-3, -10, 24, 5), Color("50616c"))
+	draw_rect(Rect2(-3, 1, 18, 4), Color("a7b0b3"))
+	draw_rect(Rect2(-3, 10, 12, 4), Color("c9cdca"))
+	# unread badge remains the strongest hazard color
+	draw_rect(Rect2(14, -34, 22, 22), Color("ef4f4a"))
+	draw_rect(Rect2(23, -30, 4, 10), Color.WHITE)
+	draw_rect(Rect2(23, -17, 4, 4), Color.WHITE)
+
+
+func _disc(center: Vector2, radius: float, segments: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in range(segments):
+		var a := TAU * float(i) / float(segments)
+		points.append(center + Vector2(cos(a), sin(a)) * radius)
+	return points

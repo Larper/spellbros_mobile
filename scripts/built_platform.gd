@@ -56,17 +56,22 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var s := SIZE * visual_scale
-	var glow := Color(0.4, 1.0, 0.5, 0.25) if bouncy else Color(0.32, 0.9, 1.0, 0.22)
-	var body := Color(0.35, 0.95, 0.5, 0.92) if bouncy else Color(0.36, 0.85, 1.0, 0.92)
-	var edge := Color(0.85, 1.0, 0.88, 0.95) if bouncy else Color(0.85, 1.0, 1.0, 0.95)
+	var glow := Color(0.3, 0.9, 0.55, 0.22) if bouncy else Color(1.0, 0.72, 0.28, 0.18)
+	var body := Color("61c68b") if bouncy else Color("f4d58d")
+	var edge := Color("d9ffe7") if bouncy else Color("fff4d0")
 	# soft glow
 	draw_rect(Rect2(-s * 0.5 - Vector2(5, 5), s + Vector2(10, 10)), glow)
-	# body
+	# A temporary sticky-note/crosswalk laid into the route.
 	draw_rect(Rect2(-s * 0.5, s), body)
-	# bright top edge
+	# bright top edge and printed guide lines
 	draw_rect(Rect2(-s.x * 0.5, -s.y * 0.5, s.x, 5.0 * visual_scale), edge)
+	if not bouncy:
+		for i in range(4):
+			var lx := (-72.0 + float(i) * 48.0) * visual_scale
+			draw_rect(Rect2(lx, -5.0 * visual_scale,
+					26.0 * visual_scale, 8.0 * visual_scale), Color("c98c4a"))
 	if bouncy:
-		# up-chevrons so the spring reads at a glance
+		# Green transit chevrons retain the spring-pad affordance.
 		for i in range(3):
 			var cx := (-60.0 + 60.0 * float(i)) * visual_scale
 			draw_polyline(PackedVector2Array([

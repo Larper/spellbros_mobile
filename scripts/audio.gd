@@ -1,45 +1,52 @@
 class_name GameAudio
 extends Node
 
-## Procedurally synthesized audio: chiptune-style SFX and a looping
+## Procedurally synthesized audio: everyday foley-like SFX and a looping
 ## background track, all generated into AudioStreamWAVs at startup.
 ## No asset files needed. As a child of Main this pauses with the tree.
 
 const RATE := 22050
-const BPM := 145.0  # psytrance tempo; PsyTheme locks the visuals to this
+const BPM := 112.0  # relaxed city-groove tempo; PsyTheme locks to this
 
 var music: AudioStreamPlayer
 var players := {}
 
 
 func _ready() -> void:
-	# jump: quick rising square sweep
-	_add_sfx("jump", _sweep(280.0, 660.0, 0.18, 1, 0.35, 3.0), -9.0, 2)
+	# jump: soft sneaker whoosh instead of an arcade square-wave chirp
+	var jump := _sweep(220.0, 520.0, 0.16, 2, 0.24, 5.0)
+	_mix_into(jump, _sweep(0.0, 0.0, 0.08, 3, 0.06, 14.0), 0)
+	_add_sfx("jump", jump, -8.0, 2)
 
-	# pickup: bright two-note sine bling
-	var pickup := _sweep(880.0, 880.0, 0.06, 0, 0.35, 2.0)
-	pickup.append_array(_sweep(1318.5, 1318.5, 0.1, 0, 0.35, 4.0))
+	# pickup: warm coffee-shop counter bell
+	var pickup := _sweep(659.25, 659.25, 0.08, 0, 0.30, 3.0)
+	pickup.append_array(_sweep(987.77, 987.77, 0.14, 0, 0.26, 5.0))
 	_add_sfx("pickup", pickup, -7.0, 3)
 
-	# build: soft shimmering triangle arpeggio
-	var build := _sweep(523.25, 523.25, 0.05, 2, 0.3, 2.0)
-	build.append_array(_sweep(659.25, 659.25, 0.05, 2, 0.3, 2.0))
-	build.append_array(_sweep(784.0, 784.0, 0.12, 2, 0.3, 5.0))
+	# build: three tidy pencil/notepad taps
+	var build := _sweep(310.0, 260.0, 0.045, 2, 0.24, 9.0)
+	build.append_array(_sweep(390.0, 340.0, 0.045, 2, 0.22, 9.0))
+	build.append_array(_sweep(520.0, 460.0, 0.09, 2, 0.20, 10.0))
 	_add_sfx("build", build, -9.0, 3)
 
-	# squish: falling square + noise splat
-	var squish := _sweep(400.0, 90.0, 0.16, 1, 0.4, 4.0)
-	_mix_into(squish, _sweep(0.0, 0.0, 0.16, 3, 0.2, 6.0), 0)
+	# Original two-note chat chime for dismissing a notification. It has the
+	# familiar messenger association without copying a third-party audio asset.
+	var squish := _sweep(880.0, 880.0, 0.075, 0, 0.28, 5.0)
+	var chat_gap := PackedFloat32Array()
+	chat_gap.resize(int(0.025 * RATE))
+	squish.append_array(chat_gap)
+	squish.append_array(_sweep(1318.51, 1318.51, 0.15, 0, 0.32, 6.0))
+	_mix_into(squish, _sweep(440.0, 440.0, 0.07, 2, 0.08, 8.0), 0)
 	_add_sfx("squish", squish, -7.0, 2)
 
-	# death: long sad descending square
-	_add_sfx("death", _sweep(660.0, 70.0, 0.6, 1, 0.4, 2.5), -5.0, 1)
+	# missed-step cue: muted descending transit chime
+	_add_sfx("death", _sweep(440.0, 110.0, 0.65, 2, 0.32, 3.5), -6.0, 1)
 
 	# boing: springy rising triangle for spring-pad launches
 	_add_sfx("boing", _sweep(160.0, 640.0, 0.25, 2, 0.45, 2.0), -6.0, 2)
 
 	music = AudioStreamPlayer.new()
-	music.stream = _make_psytrance()
+	music.stream = _make_city_groove()
 	music.volume_db = -13.0
 	add_child(music)
 
@@ -104,42 +111,37 @@ func _mix_into(buf: PackedFloat32Array, samples: PackedFloat32Array, offset: int
 			buf[j] += samples[i]
 
 
-## Full-on psytrance, 8 bars of 4/4 at BPM: four-on-the-floor kick, rolling
-## 16th offbeat bass (the classic kick-b-b-b gallop), offbeat open hats and
-## an E-phrygian acid line that swells across the loop. Loops seamlessly.
-func _make_psytrance() -> AudioStreamWAV:
+## Eight-bar lo-fi city groove: soft kick, rim taps, brushed hats, round bass,
+## and a small electric-piano figure. Still fully generated at startup.
+func _make_city_groove() -> AudioStreamWAV:
 	var beat := 60.0 / BPM
-	var s16 := beat / 4.0
 	var beats := 32
 	var buf := PackedFloat32Array()
 	buf.resize(int(float(beats) * beat * RATE))
-
-	# sub drone on low E glues the loop together
-	_mix_into(buf, _sweep(41.2, 41.2, float(beats) * beat, 0, 0.06, 0.0), 0)
-
-	# 2-bar acid sequence (E phrygian), repeated with a volume swell
-	var seq := [164.81, 174.61, 164.81, 196.0, 220.0, 164.81, 246.94, 220.0,
-			164.81, 174.61, 329.63, 246.94, 220.0, 196.0, 174.61, 164.81,
-			164.81, 293.66, 164.81, 246.94, 220.0, 196.0, 164.81, 174.61,
-			196.0, 220.0, 246.94, 293.66, 329.63, 246.94, 220.0, 174.61]
-
+	var roots := [110.0, 87.31, 130.81, 98.0]  # Am, F, C, G
+	var chords := [
+		[220.0, 261.63, 329.63], [174.61, 220.0, 261.63],
+		[261.63, 329.63, 392.0], [196.0, 246.94, 293.66],
+	]
 	for b in range(beats):
 		var at := int(float(b) * beat * RATE)
-		# kick: clicky sine drop 160 -> 45 Hz on every beat
-		_mix_into(buf, _sweep(160.0, 45.0, 0.32 * beat, 0, 0.55, 9.0), at)
-		# rolling bass on 16ths 2..4 (square growl + sine sub, gated short)
-		for k in range(1, 4):
-			var t0 := int((float(b) + float(k) * 0.25) * beat * RATE)
-			_mix_into(buf, _sweep(82.41, 82.41, s16 * 0.85, 1, 0.20, 7.0), t0)
-			_mix_into(buf, _sweep(82.41, 82.41, s16 * 0.85, 0, 0.22, 6.0), t0)
-		# offbeat open hat
-		_mix_into(buf, _sweep(0.0, 0.0, 0.10, 3, 0.16, 14.0), at + int(0.5 * beat * RATE))
-		# acid 16ths, swelling from whisper to lead over the 8 bars
-		var swell := 0.05 + 0.10 * (float(b) / float(beats))
-		for k in range(4):
-			var f: float = seq[(b * 4 + k) % seq.size()]
-			var t1 := int((float(b) + float(k) * 0.25) * beat * RATE)
-			_mix_into(buf, _sweep(f, f * 1.01, s16 * 0.9, 1, swell, 5.0), t1)
+		var ci := int(b / 8)
+		# Soft kick on one and three; rim/noise tap on two and four.
+		if b % 4 == 0 or b % 4 == 2:
+			_mix_into(buf, _sweep(105.0, 48.0, 0.22, 0, 0.30, 10.0), at)
+		else:
+			_mix_into(buf, _sweep(850.0, 520.0, 0.045, 2, 0.12, 18.0), at)
+			_mix_into(buf, _sweep(0.0, 0.0, 0.055, 3, 0.05, 22.0), at)
+		# Round bass plus a brushed offbeat hat.
+		var root_freq: float = roots[ci]
+		_mix_into(buf, _sweep(root_freq, root_freq, beat * 0.72, 0, 0.16, 4.0), at)
+		_mix_into(buf, _sweep(0.0, 0.0, 0.065, 3, 0.055, 18.0),
+				at + int(0.5 * beat * RATE))
+		# Alternating chord tones keep the loop moving without demanding focus.
+		for k in range(2):
+			var note: float = chords[ci][(b * 2 + k) % 3]
+			var note_at := at + int(float(k) * 0.5 * beat * RATE)
+			_mix_into(buf, _sweep(note, note, beat * 0.42, 2, 0.075, 5.0), note_at)
 
 	return _make_wav(buf, true)
 

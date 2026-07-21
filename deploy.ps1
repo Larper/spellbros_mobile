@@ -1,4 +1,4 @@
-# Deploys the web build to https://spellbros.neven.one via the cPanel API.
+# Deploys the web build to https://everydaylife.neven.one via the cPanel API.
 #
 # Usage:  powershell -File deploy.ps1          (or ./deploy.ps1 from a PS prompt)
 #         -SkipExport   reuse build/web as-is instead of re-exporting
@@ -13,8 +13,8 @@ $ErrorActionPreference = "Stop"
 
 $CpHost = "server108.web-hosting.com:2083"
 $CpUser = "nevesbxc"
-$DocRoot = "/home/nevesbxc/spellbros.neven.one"
-$SiteUrl = "https://spellbros.neven.one"
+$DocRoot = "/home/nevesbxc/everydaylife.neven.one"
+$SiteUrl = "https://everydaylife.neven.one"
 $Godot = "C:\Program Files (x86)\Godot\godot.exe"
 
 $proj = $PSScriptRoot

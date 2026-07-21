@@ -1,7 +1,7 @@
 class_name StarPickup
 extends Area2D
 
-## Star of Levity: grants ONE stored double jump (no stacking, no timer).
+## Double Jump pickup: grants ONE stored mid-air jump (no stacking, no timer).
 ## Tap to jump while airborne to spend it. Sparkles orbit the wizard
 ## while the charge is held, so you always know you have it.
 
@@ -37,6 +37,7 @@ func _on_body_entered(body: Node2D) -> void:
 	collected = true
 	set_deferred("monitoring", false)
 	p.double_jumps = 1
+	p.refresh_powerup_visuals()
 	# the star hangs at jump-apex height, so it is ALWAYS taken mid-air: a
 	# tap still buffered from the way up would spend the fresh charge on
 	# this very physics frame — the player never even sees the held orbs.
@@ -56,10 +57,14 @@ func _on_body_entered(body: Node2D) -> void:
 func _draw() -> void:
 	var bob := sin(t * 2.4) * 5.0
 	draw_circle(Vector2(0.0, bob), 34.0, Color(1.0, 0.85, 0.3, 0.14))
-	var pts := PackedVector2Array()
-	for i in range(10):
-		var r := 26.0 if i % 2 == 0 else 11.0
-		var a := -PI * 0.5 + TAU * float(i) / 10.0 + sin(t * 1.7) * 0.25
-		pts.append(Vector2(cos(a), sin(a)) * r + Vector2(0.0, bob))
-	draw_colored_polygon(pts, Color("ffd75e"))
-	draw_circle(Vector2(0.0, bob), 6.0, Color("fff6d8"))
+	# Golden running shoe = one stored double jump.
+	var shoe := PackedVector2Array([
+		Vector2(-25, -8 + bob), Vector2(-5, -12 + bob), Vector2(3, 2 + bob),
+		Vector2(25, 8 + bob), Vector2(24, 18 + bob), Vector2(-20, 18 + bob),
+		Vector2(-28, 9 + bob),
+	])
+	draw_colored_polygon(shoe, Color("f4c64e"))
+	draw_line(Vector2(-21, 19 + bob), Vector2(25, 19 + bob), Color("fff4c2"), 5.0)
+	for i in range(3):
+		draw_line(Vector2(-5 + i * 7, 1 + bob), Vector2(2 + i * 7, -1 + bob),
+				Color("fff4c2"), 2.5)

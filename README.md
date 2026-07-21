@@ -1,8 +1,11 @@
-# Spellbros
+# Everyday Run
 
-An endless runner-builder for phones: an auto-running wizard, one finger, and a
-level that only exists because you build it. Flappy Bird ethos — dead simple,
-brutally hard, one-more-run addictive.
+An endless runner-builder for phones: an auto-running commuter, one finger,
+and an ordinary day that only stays on track because you build the next step.
+Coffee restores energy, notifications get stomped, plans flip upside down,
+friends help, and the workday eventually disappears into open space.
+
+![Everyday Run gameplay](docs/everyday-run-preview.png)
 
 **Play it:** https://spellbros.neven.one (best on a phone, landscape)
 
@@ -12,30 +15,30 @@ procedurally synthesized. Zero asset files.
 
 ## How it plays
 
-The wizard runs right on his own. You only decide when he jumps and where
+The commuter runs right on their own. You only decide when they jump and where
 platforms appear:
 
-- **Tap LEFT of the wizard → jump** (coyote time + input buffer make taps forgiving)
-- **Tap RIGHT of the wizard → build a platform** there (costs 1 mana)
-- Touch builds land **90 px left of the tap** (`BUILD_TOUCH_NUDGE`) because
-  thumbs consistently aim wide right
-- The jump/build divider **never shrinks left of the wizard's resting spot**
+- **Tap LEFT of the commuter → jump** (coyote time + input buffer make taps forgiving)
+- **Tap RIGHT of the commuter → build a step** there (costs 1 energy)
+- A tap clearly below the falling runner becomes a last-second built step,
+  even inside the normal jump side of the screen
+- The jump/build divider **never shrinks left of the runner's resting spot**
   (~22% from the left edge), so the jump zone survives even when the crush
-  camera pushes him toward the edge
+  camera pushes them toward the edge
 - Keyboard (PC convenience): **Space** jump, **R** restart, **P** pause
 
-**Score** is distance in meters (100 px = 1 m). **You start with 0 mana** —
+**Score** is distance in meters (100 px = 1 m). **You start with 0 energy** —
 the opening teaches you to be greedy.
 
 ## Core systems
 
-- **Mana economy** — crystals are deliberately scarce: at most 2 entities
-  (crystals + enemies + pickups) per chunk, 3 after 300 m. Stomping an enemy
-  pays **+1 mana bounty**, so brave stomps are income.
-- **Built platforms** — 240×24 one-way light-bridges. They crumble after
+- **Energy economy** — coffee pickups are deliberately scarce: at most 2 entities
+  (coffee + interruptions + pickups) per chunk, 3 after 300 m. Stomping an interruption
+  pays **+1 energy**, so dismissing notifications is income.
+- **Built steps** — 240×24 one-way note/crosswalk platforms. They crumble after
   **4.0 s** early game, shrinking to **2.4 s** between 300–600 m. Collision is
   full-size instantly, so a panic-build under your feet saves you.
-- **Enemies (blobs)** — glowing circles that sit still where they spawn;
+- **Interruptions** — red notification badges sit still where they spawn;
   stomp from above kills them (and refreshes one jump until you land),
   any other touch kills you.
 - **Crush camera** — the camera never waits. It holds a lead while you keep
@@ -45,45 +48,75 @@ the opening teaches you to be greedy.
   900 px/s (~397 m). All normal gaps are sized as fractions of the *live* run
   speed so they stay jumpable at any speed (jump math is documented in
   [scripts/terrain_spawner.gd](scripts/terrain_spawner.gd)).
-- **Camera framing** — 1.25× zoom (visible world 1536×864), wizard at ~22%
-  from the left edge, and the camera eases down when terrain ahead sits lower
-  so the next pillar is on screen before you drop.
+- **Camera framing** — 1.25× zoom (visible world 1536×864), runner at ~22%
+  from the left edge, with a stable vertical frame that only lifts to reveal
+  unusually high staircase set-pieces.
 
 ## Pickups
 
 | Pickup | Looks | Where | Effect |
 |---|---|---|---|
-| Mana crystal | cyan diamond | everywhere (scarce) | +1 mana |
-| Star of Levity | gold star, mid-deck | from 50 m, on enemy-free decks | stores **one double jump**; gold sparkles orbit you while held; stomp refresh is spent before the star so it's never wasted |
-| Spring powerup | green coil | from 300 m, 8% of chunks + 20% of void pillars | your **next 3 builds are spring pads** (still 1 mana) that launch you at ~1.6× jump height on landing; HUD counts SPRING x3 → x1 |
+| Coffee | reusable mug; large takeaway cup for +3 | everywhere (scarce) | +1 or +3 energy |
+| Double Jump | gold running shoe | from 50 m, on interruption-free decks | stores **one mid-air jump**; gold lights orbit you while held |
+| Focus Mode | headphones | development grant / reserved pickup | absorbs one interruption |
 
-## Level layout — the difficulty phases
+## The day — same mechanics, everyday presentation
 
-There are no levels: terrain is generated chunk by chunk, and difficulty gates
-on **where the chunk sits in meters** (never on player distance — chunks spawn
-~27 m ahead, and gating on the player made phases arrive visibly late). It
-opens with a 20 m safe runway and two teaching crystals, then:
+Under the themed day, terrain is still generated chunk by chunk and difficulty
+gates on **where the chunk sits in meters** (never on player distance — chunks
+spawn ~27 m ahead). It opens with a safe runway and two coffee pickups, then:
 
 | Meters | Phase | What changes |
 |---|---|---|
 | 0–25 | warm-up | plain gaps, all jumpable |
-| 25 | BUILD | **mega gaps** appear — wider than any jump, must be bridged (one platform always suffices); a crystal floats over each as the reward |
-| 50 | ENEMY | blobs start appearing; Stars of Levity start spawning |
-| 85 | CLIMB | **climb waves** — terrain staircases up beyond jump height; each step needs a build, steps pay out crystals more reliably |
+| 25 | BUILD | **mega gaps** appear — wider than any jump and requiring one built step; coffee marks the opportunity |
+| 50 | INTERRUPTIONS | notification badges and Double Jump pickups start appearing |
+| 85 | CLIMB | **climb waves** rise beyond jump height; each step needs a build and pays coffee more reliably |
 | 110 | SPEED | run speed starts ramping (+1.5 px/s per meter) |
-| 170 | SWARM | 2 enemies per wide chunk, faster blobs, mega gaps can **chain into doubles** (45%) |
-| 300 | RICH | entity budget 2 → 3; platforms now crumble fastest; spring powerups appear |
-| 380 | VOID | ground mostly **vanishes**: crystal fragment trails float in open sky and must be caught with platform chains; rare narrow pillars offer solid ground (and springs) |
+| 170 | SWARM | 2 interruptions per wide chunk; mega gaps can **chain into doubles** (45%) |
+| 300 | RICH | entity budget 2 → 3 and built steps begin crumbling faster |
+
+| Meters | Part of the day | Existing mechanic |
+|---|---|---|
+| 0 | Morning Rush | original foundations, gaps, stairs, and speed ramp |
+| 300 | Commute | every built step becomes a green launch pad |
+| 600 | Notifications | chains of notification badges become stomp bridges |
+| 900 | Change of Plans | taps flip gravity between floor and ceiling routes |
+| 1200 | Night Walk | the city goes dark; coffee and built steps provide light |
+| 1500 | Friends | a contact avatar can dismiss one lethal interruption for 1 energy |
+| 1800 | Off the Clock | ground vanishes into the original open-space endgame |
 
 The headless test suite audits every phase band for **beatability**: 80 sampled
 chunks per band, every gap checked against the jump-reach math, zero unbeatable
 chunks tolerated.
 
+## Visual and audio pass with Codex + GPT-5.6
+
+The complete gameplay implementation on the `levels` branch was preserved:
+movement, controls, procedural generation, collision, difficulty, economy,
+level boundaries, persistence, and tests are unchanged. On the `Codex` branch,
+GPT-5.6 in Codex was used specifically for the presentation pass:
+
+- redrew the wizard as a commuter with a backpack, phone, jacket, and sneakers;
+- turned terrain into windowed city blocks and built platforms into temporary
+  notes/crosswalks;
+- changed crystals, stars, shields, blobs, and the helper into coffee, a
+  running shoe, headphones, notification badges, and a contact avatar;
+- replaced the cycling psychedelic palette with morning, workday, sunset,
+  night-walk, and evening city colors while preserving the darkness mechanic;
+- synthesized a new eight-bar 112 BPM lo-fi city groove plus new jump, coffee,
+  build, notification, failure, and launch sounds entirely in code;
+- updated the HUD, level names, application icon, and project copy; and
+- kept the original smoke/beatability suite green after the reskin.
+
+The shipped game has no AI runtime and needs no network or API credits; Codex
+and GPT-5.6 were development tools used to create this new presentation layer.
+
 ## Development
 
 ```powershell
-# run the game (Neven playtests; agents verify headless only)
-godot --path "C:\Dev\Spellbros Mobile"
+# run the game
+godot --path "C:\Dev\spellbros_mobile"
 
 # headless smoke test — the only automated verification
 godot --headless --path . -s res://tests/smoke_test.gd
@@ -96,7 +129,7 @@ powershell -File deploy.ps1
 ```
 
 - [scripts/main.gd](scripts/main.gd) — game manager: input routing, camera, speed/platform tuning
-- [scripts/player.gd](scripts/player.gd) — wizard physics (gravity 3300, jump −1170, coyote/buffer)
+- [scripts/player.gd](scripts/player.gd) — commuter physics and code-drawn character
 - [scripts/terrain_spawner.gd](scripts/terrain_spawner.gd) — all phases, gap math, entity budget
 - [scripts/hud.gd](scripts/hud.gd), [scripts/audio.gd](scripts/audio.gd) — HUD; synthesized SFX + music
 - [tests/smoke_test.gd](tests/smoke_test.gd) — feature tests + difficulty/beatability audit

@@ -417,9 +417,9 @@ func _run_tests() -> void:
 	var banner_quiet: bool = main.hud.banner_label.text == ""
 	main.distance_m = Levels.start_m(Levels.SPRINGS) - main.BANNER_LEAD_M + 2.0
 	await create_timer(0.05).timeout
-	print("TEST bannerlead: quiet_before=%s text=\"%s\" (expect true, LEVEL 2: SPRINGS)" % [
+	print("TEST bannerlead: quiet_before=%s text=\"%s\" (expect true, LEVEL 2: COMMUTE)" % [
 		banner_quiet, main.hud.banner_label.text])
-	_check(banner_quiet and main.hud.banner_label.text == "LEVEL 2: SPRINGS",
+	_check(banner_quiet and main.hud.banner_label.text == "LEVEL 2: COMMUTE",
 			"banner fires on its short lead")
 	main.distance_m = 20.0
 
@@ -432,9 +432,9 @@ func _run_tests() -> void:
 	var flip_quiet: bool = main.hud.banner_label.text == ""
 	main.distance_m = Levels.start_m(Levels.FLIPSIDE) + 1.0
 	await create_timer(0.05).timeout
-	print("TEST flipbanner: quiet_before=%s text=\"%s\" (expect true, LEVEL 4: FLIPSIDE)" % [
+	print("TEST flipbanner: quiet_before=%s text=\"%s\" (expect true, LEVEL 4: CHANGE OF PLANS)" % [
 		flip_quiet, main.hud.banner_label.text])
-	_check(flip_quiet and main.hud.banner_label.text == "LEVEL 4: FLIPSIDE",
+	_check(flip_quiet and main.hud.banner_label.text == "LEVEL 4: CHANGE OF PLANS",
 			"flipside banner on the runway")
 
 	# FLIPSIDE: buffered grounded flip, spam guard, solid builds
@@ -497,8 +497,8 @@ func _run_tests() -> void:
 	var outro_jumps: bool = p.jump_buffer > 0.0
 	await create_timer(0.05).timeout
 	# the UMBRA banner must already have fired here, 20 m BEFORE the band
-	var early_banner: bool = main.hud.banner_label.text == "LEVEL 5: UMBRA"
-	print("TEST flipoutro: tap_jumps=%s (expect true) gravity=%.0f (expect 1) banner=\"%s\" (expect LEVEL 5: UMBRA)" % [
+	var early_banner: bool = main.hud.banner_label.text == "LEVEL 5: NIGHT WALK"
+	print("TEST flipoutro: tap_jumps=%s (expect true) gravity=%.0f (expect 1) banner=\"%s\" (expect LEVEL 5: NIGHT WALK)" % [
 		outro_jumps, p.gravity_dir, main.hud.banner_label.text])
 	_check(outro_jumps and p.gravity_dir > 0.0, "flipside wind-down hand-back")
 	_check(early_banner, "UMBRA announced during the wind-down")
@@ -673,6 +673,8 @@ func _run_tests() -> void:
 	# must both light up while a powerup is held, and clear when it's spent
 	await create_timer(0.05).timeout
 	var ind_on: bool = p.aura.visible and p.aura.z_index == 40 \
+			and p.shield_fill.visible and p.shield_segments[0].visible \
+			and p.jump_orbs[0].visible \
 			and main.hud.shield_chip.visible and main.hud.star_chip.visible
 	p.shielded = false
 	p.double_jumps = 0
@@ -729,18 +731,18 @@ func _run_tests() -> void:
 	print("TEST resume: paused=%s moving=%s (expect false true)" % [paused, moving])
 	_check(not paused and moving, "resume")
 
-	# audio: 6 synthesized SFX plus the looping psytrance track
-	print("TEST audio: sfx=%d (expect 6) music_len=%.1fs (expect ~13.2) looping=%s" % [
+	# audio: 6 synthesized SFX plus the looping city-groove track
+	print("TEST audio: sfx=%d (expect 6) music_len=%.1fs (expect ~17.1) looping=%s" % [
 		main.audio.players.size(), main.audio.music.stream.get_length(),
 		main.audio.music.stream.loop_mode == AudioStreamWAV.LOOP_FORWARD])
 	_check(main.audio.players.size() == 6, "audio")
 
-	# psytrance clock: 8 bars of 4/4 at BPM, beat-synced theme installed
-	print("TEST psybeat: bpm=%.0f len=%.2fs (expect %.2f = 32 beats) theme=%s" % [
+	# city-groove clock: 8 bars of 4/4 at BPM, beat-synced theme installed
+	print("TEST citybeat: bpm=%.0f len=%.2fs (expect %.2f = 32 beats) theme=%s" % [
 		GameAudio.BPM, main.audio.music.stream.get_length(), 32.0 * (60.0 / GameAudio.BPM),
 		main.psy is PsyTheme])
 	_check(absf(main.audio.music.stream.get_length() - 32.0 * (60.0 / GameAudio.BPM)) < 0.01,
-			"psytrance loop length")
+			"city-groove loop length")
 	_check(main.psy is PsyTheme and main.psy.is_processing(), "psy theme active")
 
 	# stall crush: a player stuck behind the advancing camera dies

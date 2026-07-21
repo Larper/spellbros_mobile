@@ -293,9 +293,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_maybe_restart()
 		elif event.keycode == KEY_S and not game_over:
 			player.shielded = true
-			float_text(player.global_position + Vector2(0, -50), "SHIELD!", Color("b98cff"))
+			player.refresh_powerup_visuals()
+			float_text(player.global_position + Vector2(0, -50), "FOCUS MODE!", Color("7bd5d6"))
 		elif event.keycode == KEY_D and not game_over:
 			player.double_jumps = 1
+			player.refresh_powerup_visuals()
 			float_text(player.global_position + Vector2(0, -50), "DOUBLE JUMP!", Color("ffd75e"))
 
 

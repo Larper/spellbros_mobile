@@ -1,8 +1,8 @@
 class_name ManaCrystal
 extends Area2D
 
-## Spinning mana diamond. Overlap with the player collects it (+amount).
-## amount > 1 draws the rare ORANGE fragment (SPRINGS: +3, pays pad tolls).
+## Coffee/energy pickup. Overlap with the player collects it (+amount).
+## amount > 1 draws a larger takeaway cup (SPRINGS: +3, pays pad tolls).
 
 var t := randf() * TAU
 var collected := false
@@ -58,17 +58,44 @@ func collect() -> void:
 
 
 func _draw() -> void:
-	# spin illusion: width oscillates; the +3 orange runs bigger and warmer
+	# A small coffee break is ordinary, instantly legible, and preserves the
+	# exact same collision/economy as the old spinning crystal.
 	var big := amount > 1
-	var r := 22.0 if big else 16.0
-	var hw := r * (0.35 + 0.65 * absf(sin(t * 3.0)))
-	var halo := Color(1.0, 0.62, 0.2, 0.14) if big else Color(0.32, 0.9, 1.0, 0.10)
-	var body := Color("ff9a3d") if big else Color("52e5ff")
-	var core := Color("ffe0b8") if big else Color("ccf6ff")
-	draw_circle(Vector2.ZERO, r + 14.0, halo)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(0, -r - 8), Vector2(hw, 0), Vector2(0, r + 8), Vector2(-hw, 0),
-	]), body)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(0, -r * 0.5), Vector2(hw * 0.5, 0), Vector2(0, r * 0.5), Vector2(-hw * 0.5, 0),
-	]), core)
+	var bob := sin(t * 2.4) * 4.0
+	var halo := Color(1.0, 0.68, 0.25, 0.18) if big else Color(0.38, 0.84, 0.88, 0.13)
+	draw_circle(Vector2(0.0, bob), 37.0 if big else 31.0, halo)
+	if big:
+		# Takeaway cup: the rare +3 pickup.
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(-17, -17 + bob), Vector2(17, -17 + bob),
+			Vector2(13, 22 + bob), Vector2(-13, 22 + bob),
+		]), Color("ee8f45"))
+		draw_rect(Rect2(-20, -22 + bob, 40, 8), Color("fff0cf"))
+		draw_rect(Rect2(-9, -2 + bob, 18, 6), Color("ffe1a6"))
+	else:
+		# Reusable mug: the common +1 pickup.
+		# Draw the handle first as a chunky C; the Mobile renderer was dropping
+		# arcs after the cup body and leaving only a blue square.
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(10, -7 + bob), Vector2(27, -7 + bob),
+			Vector2(32, -2 + bob), Vector2(32, 10 + bob),
+			Vector2(27, 16 + bob), Vector2(10, 16 + bob),
+			Vector2(10, 10 + bob), Vector2(24, 10 + bob),
+			Vector2(26, 7 + bob), Vector2(26, 1 + bob),
+			Vector2(23, -1 + bob), Vector2(10, -1 + bob),
+		]), Color("bdecef"))
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(-18, -12 + bob), Vector2(15, -12 + bob),
+			Vector2(12, 18 + bob), Vector2(-15, 18 + bob),
+		]), Color("58b8bf"))
+		draw_rect(Rect2(-19, -14 + bob, 35, 6), Color("e8fbf7"))
+		draw_rect(Rect2(-11, 0 + bob, 17, 4), Color("d6f3ee"))
+	# Steam makes both variants read as coffee rather than a generic token.
+	draw_polyline(PackedVector2Array([
+		Vector2(-10, -20 + bob), Vector2(-14, -25 + bob),
+		Vector2(-10, -30 + bob), Vector2(-13, -35 + bob),
+	]), Color(1, 1, 1, 0.65), 2.5, true)
+	draw_polyline(PackedVector2Array([
+		Vector2(5, -22 + bob), Vector2(9, -27 + bob),
+		Vector2(5, -32 + bob), Vector2(9, -37 + bob),
+	]), Color(1, 1, 1, 0.5), 2.5, true)

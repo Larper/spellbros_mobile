@@ -8,13 +8,13 @@ extends RefCounted
 ## tracked per starting level so late starts never beat the "from 0" run.
 
 const DEFS := [
-	{"name": "FOUNDATIONS", "start": 0.0},
-	{"name": "SPRINGS", "start": 300.0},
-	{"name": "BLOB BRIDGES", "start": 600.0},
-	{"name": "FLIPSIDE", "start": 900.0},
-	{"name": "UMBRA", "start": 1200.0},
-	{"name": "SPELLBROS", "start": 1500.0},
-	{"name": "THE VOID", "start": 1800.0},
+	{"name": "MORNING RUSH", "start": 0.0},
+	{"name": "COMMUTE", "start": 300.0},
+	{"name": "NOTIFICATIONS", "start": 600.0},
+	{"name": "CHANGE OF PLANS", "start": 900.0},
+	{"name": "NIGHT WALK", "start": 1200.0},
+	{"name": "FRIENDS", "start": 1500.0},
+	{"name": "OFF THE CLOCK", "start": 1800.0},
 ]
 
 # indices, for readable level checks across the codebase

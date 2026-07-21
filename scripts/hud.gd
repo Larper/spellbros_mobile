@@ -38,7 +38,7 @@ func _ready() -> void:
 	score_label.position = Vector2(48, 28)
 	root.add_child(score_label)
 
-	coin_label = _label(64, Color("52e5ff"))
+	coin_label = _label(64, Color("f4c15d"))
 	root.add_child(coin_label)
 	coin_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	coin_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -52,8 +52,8 @@ func _ready() -> void:
 	# renders on every machine (score/mana/float-texts do), so a held
 	# shield or double jump is always announced here, whatever happens to
 	# the world-space aura.
-	shield_chip = _label(40, Color("b98cff"))
-	shield_chip.text = "SHIELD"
+	shield_chip = _label(40, Color("7bd5d6"))
+	shield_chip.text = "FOCUS MODE"
 	root.add_child(shield_chip)
 	shield_chip.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	shield_chip.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -77,7 +77,7 @@ func _ready() -> void:
 	star_chip.visible = false
 
 	hint_label = _label(40, Color(1, 1, 1, 0.9))
-	hint_label.text = "Tap LEFT of your wizard to JUMP  •  Tap RIGHT to BUILD (1 mana)"
+	hint_label.text = "Tap LEFT to JUMP  •  Tap RIGHT to BUILD A STEP (1 energy)"
 	root.add_child(hint_label)
 	hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	hint_label.offset_left = -800.0
@@ -90,7 +90,7 @@ func _ready() -> void:
 	hint_tw.tween_property(hint_label, "modulate:a", 0.0, 1.0)
 
 	no_mana_label = _label(52, Color("ff6688"))
-	no_mana_label.text = "Not enough mana!"
+	no_mana_label.text = "Out of energy!"
 	no_mana_label.modulate.a = 0.0
 	root.add_child(no_mana_label)
 	no_mana_label.set_anchors_preset(Control.PRESET_CENTER)
@@ -197,15 +197,15 @@ func _build_menu(root: Control) -> void:
 	root.add_child(menu_root)
 
 	var dim := ColorRect.new()
-	dim.color = Color(0.05, 0.03, 0.1, 0.75)
+	dim.color = Color(0.035, 0.075, 0.10, 0.82)
 	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_root.add_child(dim)
 
 	# top-anchored layout: title, subtitle, then the list growing downward,
 	# so the first (playable) button can never end up off-screen
-	var title := _label(120, Color("8b6cff"))
-	title.text = "SPELLBROS"
+	var title := _label(120, Color("f4c15d"))
+	title.text = "EVERYDAY RUN"
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	menu_root.add_child(title)
 	title.offset_left = -700.0
@@ -215,7 +215,7 @@ func _build_menu(root: Control) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	menu_sub = _label(40, Color(1, 1, 1, 0.85))
-	menu_sub.text = "Choose your level"
+	menu_sub.text = "Choose a part of the day"
 	menu_sub.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	menu_root.add_child(menu_sub)
 	menu_sub.offset_left = -700.0
@@ -227,7 +227,7 @@ func _build_menu(root: Control) -> void:
 	# dev row: hover it and scroll (or press ↑/↓ anywhere on the menu) to
 	# set a late-spawn offset; SHIFT steps by 100 m. mouse_filter STOP so
 	# this one label hears the wheel itself.
-	spawn_row = _label(34, Color("b98cff"))
+	spawn_row = _label(34, Color("7bd5d6"))
 	spawn_row.mouse_filter = Control.MOUSE_FILTER_STOP
 	spawn_row.gui_input.connect(_spawn_row_input)
 	spawn_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -325,13 +325,13 @@ func _build_game_over(root: Control) -> void:
 	over_root.add_child(dim)
 
 	var title := _label(120, Color.WHITE)
-	title.text = "GAME OVER"
+	title.text = "MISSED A STEP"
 	_center_row(over_root, title, -260.0, -120.0)
 
 	final_label = _label(64, Color.WHITE)
 	_center_row(over_root, final_label, -90.0, -10.0)
 
-	best_label = _label(48, Color("52e5ff"))
+	best_label = _label(48, Color("7bd5d6"))
 	_center_row(over_root, best_label, 0.0, 60.0)
 
 	restart_label = _label(44, Color(1, 1, 1, 0.85))
@@ -379,7 +379,7 @@ func update_score(m: int) -> void:
 
 
 func update_coins(n: int) -> void:
-	coin_label.text = "MANA " + str(n)
+	coin_label.text = "ENERGY " + str(n)
 
 
 func update_powerups(sh: bool, dj: bool) -> void:

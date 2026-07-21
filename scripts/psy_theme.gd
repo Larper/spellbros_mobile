@@ -1,12 +1,10 @@
 class_name PsyTheme
 extends CanvasModulate
 
-## Beat-synced psychedelia. Every kick flashes the whole canvas toward white
-## while the tint's hue crawls through the full spectrum (~50 s per cycle);
-## the background pulses a complementary color in the same rhythm. Driven by
-## GameAudio.music_time() so the visuals stay locked to the psytrance loop
-## instead of drifting on frame time. The HUD lives on a CanvasLayer and
-## stays readable/untinted.
+## Beat-synced urban day cycle. The world moves from warm morning light through
+## cool workday blue and sunset, while a restrained pulse follows the lo-fi
+## soundtrack. Driven by GameAudio.music_time() so visual motion never drifts.
+## The HUD lives on a CanvasLayer and stays readable/untinted.
 ##
 ## UMBRA level: the same node becomes the darkness — the modulate drops to
 ## near-black (still breathing with the kick) and PointLight2D nodes made
@@ -30,18 +28,36 @@ func _process(delta: float) -> void:
 	t = mt if mt > 0.0 else t + delta
 	var beat := 60.0 / GameAudio.BPM
 	var pulse := exp(-5.0 * fmod(t, beat) / beat)
-	var hue := fmod(t * 0.02, 1.0)
 	var dark := darkness()
+	var d: float = main.distance_m
+	var morning := Color("fff0cf")
+	var daytime := Color("e5f5f3")
+	var sunset := Color("f4d0bf")
+	var evening := Color("dce8f5")
+	var lite: Color
+	var lite_bg: Color
+	if d < Levels.start_m(Levels.BRIDGES):
+		var day_t := clampf(d / Levels.start_m(Levels.BRIDGES), 0.0, 1.0)
+		lite = morning.lerp(daytime, day_t)
+		lite_bg = Color("17445a").lerp(Color("286577"), day_t)
+	elif d < Levels.start_m(Levels.UMBRA):
+		var sunset_t := clampf((d - Levels.start_m(Levels.BRIDGES)) /
+				(Levels.start_m(Levels.UMBRA) - Levels.start_m(Levels.BRIDGES)), 0.0, 1.0)
+		lite = daytime.lerp(sunset, sunset_t)
+		lite_bg = Color("286577").lerp(Color("6b4054"), sunset_t)
+	else:
+		var evening_t := clampf((d - Levels.start_m(Levels.UMBRA)) / 600.0, 0.0, 1.0)
+		lite = sunset.lerp(evening, evening_t)
+		lite_bg = Color("342c52").lerp(Color("172b46"), evening_t)
+	lite = lite.lerp(Color.WHITE, 0.05 + 0.05 * pulse)
 	# lights-out target: PITCH black (Neven: UMBRA played like a faster
 	# FOUNDATIONS — now unlit stretches are truly invisible, and sight
 	# itself is the resource: crystals beacon, built platforms are the
 	# lanterns you throw ahead to find the way). Still thumps faintly.
 	var v := 0.03 + 0.02 * pulse
-	var lite := Color.from_hsv(hue, 0.32 - 0.22 * pulse, 1.0)
-	var lite_bg := Color.from_hsv(fmod(hue + 0.5, 1.0), 0.6, 0.10 + 0.10 * pulse)
 	color = lite.lerp(Color(v, v, v * 1.25), dark)
 	RenderingServer.set_default_clear_color(
-			lite_bg.lerp(Color(0.004, 0.003, 0.01), dark))
+			lite_bg.lerp(Color(0.004, 0.006, 0.012), dark))
 
 
 ## 0 = full psychedelia, 1 = UMBRA pitch black. Never a hard cut (Neven):
