@@ -352,6 +352,10 @@ func _spawn_chunk() -> Dictionary:
 ## gentle-staircase heights with plain jumpable gaps — are breathers that
 ## cost no mana. Between sections come VOID CROSSINGS (_spawn_spring_void).
 func _spawn_spring_chunk(d: float, v: float) -> Dictionary:
+	# wind-down (Neven: the hand-off into BLOB BRIDGES must be as calm as
+	# FLIPSIDE's into UMBRA): one continuous floor, before any deck/void roll
+	if Levels.start_m(Levels.BRIDGES) - d <= WIND_DOWN_M:
+		return _spawn_spring_outro(v)
 	if spring_deck_left <= 0:
 		return _spawn_spring_void(d, v)
 	spring_deck_left -= 1
@@ -439,6 +443,36 @@ func _spawn_spring_void(d: float, v: float) -> Dictionary:
 		"enemies": 0, "entities": 5, "climb": 0,
 		"void": false, "pillar": false, "spring": true, "svoid": true,
 		"stars": 0, "rise": rise, "speed": v,
+	}
+
+
+## SPRINGS wind-down (last WIND_DOWN_M meters): one continuous floor —
+## overlapping strips, no voids, no spring pads, no fragments hung in
+## holes — gliding DOWN from wherever the last deck section or crossing
+## ended (as high as 340) back into the BRIDGES entry band before the
+## first blob is ever shown. Strips only ever step DOWN (110-150 px, an
+## easy run-off drop inside the overlap): a rise inside an overlap is a
+## lip that stops the auto-runner dead — the FLIPSIDE runway lesson.
+## 110 * 4 chunks >= the worst 440 px descent, so the floor always
+## reaches the 780+ band in time for the BRIDGES teach-in clamp.
+func _spawn_spring_outro(v: float) -> Dictionary:
+	var start := next_x - 0.2 * v
+	var w := (next_x - start) + rng.randf_range(0.9 * v, 1.2 * v)
+	var dy := rng.randf_range(110.0, 150.0) if last_top_y < 770.0 else 0.0
+	var out_y := clampf(last_top_y + dy, 420.0, 920.0)
+	_place_chunk(start, out_y, w)
+	var used := 0
+	if rng.randf() < 0.35:
+		_place_coin(Vector2(start + w * 0.6, out_y - 60.0))
+		used = 1
+	var gap := start - next_x  # negative: strips overlap what came before
+	next_x = start + w
+	last_top_y = out_y
+	return {
+		"gap": gap, "width": w, "top_y": out_y, "mega": false,
+		"enemies": 0, "entities": used, "climb": 0,
+		"void": false, "pillar": false, "spring": true, "svoid": false,
+		"sout": true, "gfrag": 0, "stars": 0, "rise": 0.0, "speed": v,
 	}
 
 

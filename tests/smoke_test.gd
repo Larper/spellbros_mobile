@@ -821,6 +821,13 @@ func _run_tests() -> void:
 	# fragments hang IN the pillar gaps (Neven: springing the holes between
 	# pillars ran the pool dry — the flight path itself must pay)
 	_check(springb["gfrag"] > 15, "springs pillar gaps carry fragments")
+	# SPRINGS wind-down: one continuous overlapping floor into BRIDGES —
+	# no void crossings, no fragments in holes, only down-steps (a rise
+	# inside an overlap is a lip that stops the auto-runner)
+	var spring_out := _probe(Levels.start_m(Levels.BRIDGES) - 20.0, 80)
+	_check(spring_out["sout"] == 80 and spring_out["svoid"] == 0
+			and spring_out["gfrag"] == 0 and spring_out["min_top"] >= 770.0,
+			"springs wind-down: continuous calm floor")
 	# BLOB BRIDGES band: EVERY gap is a blob bridge (singles and doubles),
 	# and the chain geometry holds exactly — first blob one edge-jump out,
 	# doubles one passive bounce apart
@@ -937,7 +944,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"dead": 0, "dfloor": 0, "dceil": 0,
 			"spring": 0, "svoid": 0, "gaunt": 0,
 			"blong": 0, "bshort": 0, "bmega": 0, "pads": 0, "gfrag": 0,
-			"sblob": 0, "pblob": 0,
+			"sblob": 0, "pblob": 0, "sout": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
@@ -965,6 +972,8 @@ func _probe(d: float, n: int) -> Dictionary:
 		stats["stars"] += s["stars"]
 		stats["beacon"] += s.get("beacon", 0)
 		stats["gfrag"] += s.get("gfrag", 0)
+		if s.get("sout", false):
+			stats["sout"] += 1
 		if s.get("bridge", false):
 			stats["bridge"] += 1
 		if s.get("flip", false):
