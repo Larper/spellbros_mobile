@@ -551,22 +551,24 @@ func _spawn_flip_outro(v: float) -> Dictionary:
 	}
 
 
-## BLOB BRIDGES level, round 3 (Neven: bring back "every gap is a blob
-## bridge", and the flow must never need a frame-perfect mid-air tap).
-## Every non-wind-down gap carries 1 or 2 blobs at the shared stomp height
-## (deck - 90, so the crown a stomp lands on sits ~122 px above the deck).
-## The whole layout is derived from the bounce math (STOMP_BOUNCE -1000,
-## gravity 3300), so the chain is automatic:
+## BLOB BRIDGES level, round 4 (Neven: too easy — the passive chain alone
+## carried whole runs). Every non-wind-down gap still carries 1 or 2 blobs
+## at the shared stomp height (deck - 90), and the layout is still derived
+## from the bounce math (STOMP_BOUNCE -1000, gravity 3300):
 ##   - a ground jump falls through crown height ~0.58*v after the tap, so
 ##     the FIRST blob sits exactly 0.5*v past the takeoff edge: tap AT the
 ##     edge and the stomp lands (the ±95 px aim assist covers the rest);
-##   - a passive bounce between same-height crowns hangs 0.606 s, so a
-##     double's second blob sits 0.6*v after the first: stomp one,
-##     automatically stomp two — no tap in between (round 2 spaced them
-##     ~0.35*v apart, which is why Neven flew clean OVER the second blob);
+##   - a PASSIVE double's second blob sits 0.6*v after the first (one
+##     no-tap bounce, 0.606 s of hang) — the flow Neven liked;
+##   - an ACTIVE double's second blob sits 1.08*v out: the passive bounce
+##     falls 0.48*v SHORT into the gap, so the stomp-refresh jump must be
+##     spent near the bounce apex (tap ~0.3 s after the stomp; carries
+##     1.07-1.12*v for taps within ±0.05 s, the aim assist eats the rest);
 ##   - the bounce off the LAST blob falls back to deck level in 0.71 s, so
-##     the far edge sits 0.50-0.58*v past it: the chain always lands INSIDE
-##     the next deck (round 2 often overshot it — the lost flow).
+##     the far edge sits 0.50-0.56*v past it: the chain always lands INSIDE
+##     the next deck.
+## The band alternates the three: land-jump-stomp flow one gap, apex-tap
+## gap-jump the next — never one rhythm long enough to go on autopilot.
 func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	# wind-down: the last stretch before FLIPSIDE goes blob-free with plain
 	# jumps and wide decks — the corridor is entered calm, not mid-panic
@@ -590,14 +592,22 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 			"void": false, "pillar": false, "bridge": true, "bkind": "out",
 			"stars": 0, "rise": out_rise, "speed": v,
 		}
-	# teach-in: singles only and wide decks; the full band mixes in doubles
+	# teach-in: singles only and wide decks; the full band mixes singles,
+	# passive doubles and ACTIVE doubles (the apex-tap gap-jump)
 	var teach := _is_teach(d)
 	var top_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
 	var blob_xs: Array = [0.5 * v]  # px past the takeoff edge, see above
-	if not teach and rng.randf() < 0.45:
-		blob_xs.append(0.5 * v + 0.6 * v)
+	var active := false
+	if not teach:
+		var kind := rng.randf()
+		if kind < 0.35:
+			active = true
+			blob_xs.append(0.5 * v + 1.08 * v)
+		elif kind < 0.65:
+			blob_xs.append(0.5 * v + 0.6 * v)
 	# the far edge lands the passive bounce mid-deck; doubles trim the top
 	# of the range so the fallback build (1.418*v + 240) still bridges them
+	# (an active double's gap needs two)
 	var last_bx: float = blob_xs[blob_xs.size() - 1]
 	var gap: float = last_bx \
 			+ rng.randf_range(0.50, 0.58 if blob_xs.size() == 1 else 0.56) * v
@@ -627,7 +637,7 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 		"enemies": blobs, "entities": used, "climb": 0,
 		"void": false, "pillar": false, "bridge": true, "bkind": "blob",
 		"blobs": blobs, "b1": blob_xs[0],
-		"b2": blob_xs[1] if blobs == 2 else 0.0,
+		"b2": blob_xs[1] if blobs == 2 else 0.0, "bact": active,
 		"stars": 0, "rise": rise, "speed": v,
 	}
 

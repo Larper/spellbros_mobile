@@ -757,6 +757,9 @@ func _run_tests() -> void:
 	_check(bridgeb["bridge"] == 80 and bridgeb["enemies"] > 80 and bridgeb["climbs"] == 0,
 			"blob bridges band: every gap a blob bridge, doubles present")
 	_check(bridgeb["b1err"] < 0.5 and bridgeb["bsperr"] < 0.5, "bridges flow geometry")
+	# the band alternates rhythms: passive-flow doubles AND apex-tap actives
+	_check(bridgeb["bact"] > 10 and bridgeb["bpas"] > 10,
+			"bridges mix passive and apex-tap doubles")
 	# bridges wind-down: the corridor is entered calm — no blobs at the end
 	var bridge_out := _probe(Levels.start_m(Levels.FLIPSIDE) - 20.0, 80)
 	_check(bridge_out["bridge"] == 80 and bridge_out["enemies"] == 0,
@@ -839,7 +842,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
-			"sp_lo": 9.0, "sp_hi": 0.0,
+			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -919,20 +922,27 @@ func _probe(d: float, n: int) -> Dictionary:
 				if s["gap"] > 0.68 * v:
 					stats["bad"] += 1
 			else:
-				# blob gap: the stomp chain is the line, one build the fallback
+				# blob gap: the stomp chain is the line; one build is the
+				# fallback (an active double's wider gap gets two)
 				stats["builds"] += 1.0
-				if s["gap"] > one_build:
+				if s["gap"] > one_build * (2.0 if s.get("bact", false) else 1.0):
 					stats["bad"] += 1
 				# flow geometry: first blob one edge-jump out (0.5*v), a
-				# double's second one passive bounce later (0.6*v), and the
-				# bounce off the last blob (0.71*v of carry) must land
-				# INSIDE the far deck, never past it
+				# double's second one passive bounce later (0.6*v) — or one
+				# apex-tap jump later (1.08*v) for actives — and the bounce
+				# off the last blob (0.71*v of carry) must land INSIDE the
+				# far deck, never past it
 				stats["b1err"] = maxf(stats["b1err"], absf(s["b1"] - 0.5 * v))
 				var blast: float = s["b1"]
 				if s["blobs"] == 2:
+					var want_sp := (1.08 if s.get("bact", false) else 0.6) * v
 					stats["bsperr"] = maxf(stats["bsperr"],
-							absf(s["b2"] - s["b1"] - 0.6 * v))
+							absf(s["b2"] - s["b1"] - want_sp))
 					blast = s["b2"]
+					if s.get("bact", false):
+						stats["bact"] += 1
+					else:
+						stats["bpas"] += 1
 				var land_in: float = 0.71 * v - (s["gap"] - blast)
 				if land_in < 50.0 or land_in > s["width"] - 30.0:
 					stats["bad"] += 1
