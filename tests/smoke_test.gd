@@ -134,46 +134,12 @@ func _run_tests() -> void:
 	print("TEST stompjump: vel %.0f -> %.0f (expect falling, then jump < -700)" % [fall_vel, p.velocity.y])
 	_check(p.velocity.y < -700.0, "stompjump")
 
-	# camera eases down when the terrain ahead sits lower (next-pillar visibility)
-	var y_saved: float = p.global_position.y
-	p.global_position.y = 500.0
-	var t_flat: float = main.camera_target_y()
-	var low_chunk := GroundChunk.new(300.0)
-	low_chunk.position = Vector2(p.global_position.x + 300.0, 1500.0)
-	main.spawner.add_child(low_chunk)
-	var t_low: float = main.camera_target_y()
-	low_chunk.queue_free()
-	p.global_position.y = y_saved
-	print("TEST camahead: target flat %.0f, low pillar ahead %.0f (expect >= 200 px lower)" % [t_flat, t_low])
-	_check(t_low - t_flat >= 200.0, "camera pillar lookdown")
-
-	# a hard fall (past flat-jump landing speed) forces the frame down too
-	await create_timer(0.05).timeout  # let the probe chunk above actually free
-	p.global_position.y = 600.0
-	p.velocity.y = 0.0
-	var t_still: float = main.camera_target_y()
-	p.velocity.y = 2200.0
-	var t_fall: float = main.camera_target_y()
-	p.velocity.y = 0.0
-	p.global_position.y = y_saved
-	print("TEST camfall: still %.0f falling %.0f (expect >= 400 px lower)" % [t_still, t_fall])
-	_check(t_fall - t_still >= 400.0, "camera fall lookdown")
-
-	# FLIPSIDE frames the corridor: floor-running looks up at the ceiling,
-	# ceiling-running looks down at the floor — the opposite surface (and
-	# any gap coming in it) must stay on screen
-	main.distance_m = 950.0
-	var y_keep: float = p.global_position.y
-	p.global_position.y = 880.0
-	p.gravity_dir = 1.0
-	var t_floor: float = main.camera_target_y()
-	p.gravity_dir = -1.0
-	var t_ceil: float = main.camera_target_y()
-	p.gravity_dir = 1.0
-	p.global_position.y = y_keep
-	main.distance_m = 20.0
-	print("TEST camflip: floor %.0f (expect 640) ceiling %.0f (expect 1000)" % [t_floor, t_ceil])
-	_check(t_floor == 640.0 and t_ceil == 1000.0, "flipside corridor framing")
+	# the camera's vertical frame is STATIC (Flappy Bird style): the jump,
+	# bounce and fall tests above ran full physics frames — the frame must
+	# not have moved (a second check after the FLIPSIDE tests covers flips)
+	print("TEST camstatic: y=%.0f (expect %.0f, never moving)" % [
+		main.cam.global_position.y, main.CAMERA_Y])
+	_check(main.cam.global_position.y == main.CAMERA_Y, "camera static across jumps")
 
 	# no-mana path must refuse to build
 	main.coins = 0
@@ -326,12 +292,17 @@ func _run_tests() -> void:
 	main.add_child(star)
 	star._on_body_entered(p)
 	var granted: int = p.double_jumps
+	# guaranteed open air: no drifting terrain chunk may catch this fall
+	# (the wizard keeps auto-running during the whole suite, so his x — and
+	# what happens to sit 500 px up at it — depends on test timing)
+	p.collision_mask = 0
 	p.global_position.y -= 500.0
 	p.velocity = Vector2.ZERO
 	await create_timer(0.3).timeout  # fall until floor state and coyote expire
 	var airborne: bool = not p.is_on_floor() and p.coyote <= 0.0
 	p.try_jump()
 	await create_timer(0.1).timeout
+	p.collision_mask = 1
 	print("TEST star: granted=%d (expect 1) airborne=%s (expect true) vel_y=%.0f (expect < -500) charges_left=%d (expect 0)" % [
 		granted, airborne, p.velocity.y, p.double_jumps])
 	_check(granted == 1 and airborne and p.velocity.y < -500.0 and p.double_jumps == 0,
@@ -518,6 +489,13 @@ func _run_tests() -> void:
 	print("TEST fliprunway: tap_jumps=%s (expect true)" % runway_jumps)
 	_check(runway_jumps, "flipside runway taps jump")
 	p.jump_buffer = 0.0
+
+	# static frame re-check: the FLIPSIDE tests above flipped gravity both
+	# ways across real physics frames — the camera's y must not have
+	# followed (the old per-gravity retargeting is what jittered — Neven)
+	print("TEST camflip: y=%.0f (expect %.0f after flips)" % [
+		main.cam.global_position.y, main.CAMERA_Y])
+	_check(main.cam.global_position.y == main.CAMERA_Y, "camera static across flips")
 
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
 	main.distance_m = 1300.0

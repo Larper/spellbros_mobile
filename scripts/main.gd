@@ -31,6 +31,12 @@ const PLATFORM_DECAY_END := 600.0
 ## edge: what's behind him is dead space, what's ahead is the game.
 const CAMERA_ZOOM := 1.25
 const CAMERA_LEAD := 430.0  # world px ahead of the wizard the camera centers on
+## The vertical frame is STATIC, Flappy Bird style: jumps, falls and gravity
+## flips never move it (the old per-state retargeting is what jittered on
+## every FLIPSIDE flip — Neven). At this zoom the frame spans y 188..1052,
+## which holds the whole playfield at once: the deepest deck top (970) with
+## ground below it, and the FLIPSIDE ceiling faces (240..380) overhead.
+const CAMERA_Y := 620.0
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
 ## The stall-crush never advances faster than base-speed pressure (0.85*470):
 ## at capped run speed the chase would otherwise eat the reaction window
@@ -103,7 +109,7 @@ func _ready() -> void:
 	add_child(bro)
 
 	cam = Camera2D.new()
-	cam.global_position = Vector2(player.global_position.x + CAMERA_LEAD, 620.0)
+	cam.global_position = Vector2(player.global_position.x + CAMERA_LEAD, CAMERA_Y)
 	cam.zoom = Vector2(CAMERA_ZOOM, CAMERA_ZOOM)
 	add_child(cam)
 	cam.make_current()
@@ -183,9 +189,9 @@ func _physics_process(delta: float) -> void:
 		var flip_zone := in_flip_zone()
 		if not flip_zone and player.gravity_dir < 0.0:
 			player.gravity_dir = 1.0  # the wind-down / next level rights the world
-		if flip_zone and player.global_position.y < cam.global_position.y - 710.0:
+		if flip_zone and player.global_position.y < CAMERA_Y - 710.0:
 			player.die()  # flew off the top with no ceiling to catch you
-		if player.global_position.y > cam.global_position.y + 710.0:
+		if player.global_position.y > CAMERA_Y + 710.0:
 			player.die()  # ~280 world px below the zoomed view's bottom edge
 
 	if not player.dead:
@@ -199,53 +205,14 @@ func _physics_process(delta: float) -> void:
 		var half_w := get_viewport().get_visible_rect().size.x * 0.5 / CAMERA_ZOOM
 		if player.global_position.x < cam.global_position.x - half_w - 30.0:
 			player.die()
-	cam.global_position.y = lerpf(cam.global_position.y, camera_target_y(), 1.0 - pow(0.002, delta))
+	# cam.y stays CAMERA_Y forever: the frame is the level, the wizard moves
+	# inside it, and the bottom of the world is always in view
 
 	if shake > 0.0:
 		shake = maxf(0.0, shake - delta * 30.0)
 		cam.offset = Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
 	else:
 		cam.offset = Vector2.ZERO
-
-
-func camera_target_y() -> float:
-	# FLIPSIDE frames the whole corridor: the wizard's surface sits ~40 px
-	# inside it, so offsetting 240 px toward its middle — from either
-	# gravity — keeps BOTH floor and ceiling on screen. A coming gap in the
-	# ceiling must never be invisible overhead (Neven).
-	if in_flip_zone():
-		return clampf(player.global_position.y - 240.0 * player.gravity_dir, 150.0, 1000.0)
-	# Frame the player with a slightly lower baseline than before, and ease
-	# further down when the terrain ahead sits lower, so the next pillar is
-	# already on screen while descending. Chunk tops are static world data,
-	# so this never pulses with the jump arc.
-	var target := player.global_position.y - 60.0
-	# A hard fall drags the frame down ahead of the wizard: what's below
-	# matters more than the sky above (Neven twice: pillar tops arrived
-	# unseen). Kicks in just before a flat jump's landing speed (1170), so
-	# plain hops get at most a whisper of it right at touchdown; real drops
-	# pull the frame down hard and the bottom clamp gives them 1000 px of
-	# room (view bottom 1432 — still below the deepest ground at 970).
-	target += minf(maxf(0.0, player.velocity.y - 1000.0) * 0.7, 480.0)
-	var ahead := _lowest_ground_ahead()
-	if ahead > 0.0:
-		# 360/240 keep the same screen fractions the pre-zoom 450/300 gave the
-		# full-height view (visible half-height is now 432, not 540)
-		target = maxf(target, minf(ahead - 360.0, player.global_position.y + 240.0))
-	return clampf(target, 150.0, 1000.0)
-
-
-func _lowest_ground_ahead() -> float:
-	# Top y of the lowest chunk overlapping [player.x, player.x + 700]; 0 if none.
-	var px := player.global_position.x
-	var lowest := 0.0
-	for c in spawner.get_children():
-		var g := c as GroundChunk
-		if g == null:
-			continue
-		if g.position.x <= px + 700.0 and g.position.x + g.width >= px:
-			lowest = maxf(lowest, g.position.y)
-	return lowest
 
 
 func banner_lead_for(lv: int) -> float:
