@@ -815,6 +815,9 @@ func _run_tests() -> void:
 	# raised crystal chance, because mana is sight there (Neven: it starved)
 	var umbrab := _probe(Levels.start_m(Levels.UMBRA) + 100.0, 80)
 	_check(umbrab["mana"] >= 0.8, "umbra runs rich in fragments")
+	# EVERY deck opens with its left-edge beacon — a deck whose only light
+	# sat mid-deck read as a missing edge (Neven)
+	_check(umbrab["beacon"] == 80, "umbra decks always open with a beacon")
 	# SPELLBROS: gauntlet decks dominate, mega crossings mix in, and the
 	# blob line is CHAOS by construction — across the sample the spacings
 	# must straddle both sides of the 0.6*v auto-chain window, never
@@ -882,7 +885,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
-			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0,
+			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
 			"mana": 0.0, "builds": 0.0, "pace": 0.0, "gap_ratio": 0.0,
 			"enemy_rate": 0.0}
 	var span := 0.0
@@ -905,6 +908,7 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["pillar"]:
 			stats["pillars"] += 1
 		stats["stars"] += s["stars"]
+		stats["beacon"] += s.get("beacon", 0)
 		if s.get("bridge", false):
 			stats["bridge"] += 1
 		if s.get("flip", false):

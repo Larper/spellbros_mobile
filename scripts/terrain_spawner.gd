@@ -233,13 +233,16 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
 		used += 1
 
-	# UMBRA: a lit fragment at the START of most decks — the beacon marks
+	# UMBRA: a lit fragment at the START of EVERY deck — the beacon marks
 	# where footing begins, and the richer income funds the lantern-builds
-	# that sight demands (Neven: the dark band starved and killed; light
-	# must be affordable). Rolled before enemies so light wins the budget.
-	if lv == Levels.UMBRA and used < budget and rng.randf() < 0.9:
+	# that sight demands. Unconditional (Neven: a deck whose only fragment
+	# sat mid-deck read as a missing left edge); placed before enemies so
+	# light always wins the budget.
+	var beacon := 0
+	if lv == Levels.UMBRA:
 		_place_coin(Vector2(x + 90.0, top_y - 60.0))
 		used += 1
+		beacon = 1
 
 	# GUARANTEED showcase (see the flags): shield between ~80-120 m, star
 	# between ~110-150 m — mid-deck, at running height, on a chunk kept
@@ -336,7 +339,7 @@ func _spawn_chunk() -> Dictionary:
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega,
 		"enemies": enemies, "entities": used, "climb": climb_dir,
 		"void": false, "pillar": false, "stars": stars, "shields": shields,
-		"rise": rise, "speed": v,
+		"beacon": beacon, "rise": rise, "speed": v,
 	}
 
 
