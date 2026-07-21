@@ -108,9 +108,8 @@ var flip_ceil_y := 0.0  # walkable face y of the last ceiling strip placed
 # when it reaches 0 the next chunk is a void crossing
 var spring_deck_left := 3
 
-# SPELLBROS rhythm state: strict short/long deck alternation, and megas
-# never twice in a row
-var bros_long := false
+# SPELLBROS rhythm state: megas never twice in a row (the pool can't
+# fund back-to-back crossing tolls)
 var bros_mega_last := false
 
 # FOUNDATIONS: true once the first blob has been placed this run — the
@@ -684,23 +683,27 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	}
 
 
-## SPELLBROS level (Neven's spec, round 4): "way more blobs, more cramped,
-## more irregular — and more platforming". The whole band is blob country:
-## EVERY deck carries a line of them, and the run strictly ALTERNATES
-## short decks (1.2-1.7*v) with long gauntlet decks (5-10*v), while the
-## gap before a deck is sometimes a MEGA (0.95-1.25*v: one built platform,
-## the pool's other drain) and otherwise a plain jump. The lines are
-## cramped walls with irregular breathers — spacings mostly 0.12-0.26*v,
-## some mid, some wide — so no bounce rhythm survives more than a few
-## crowns: stomp what lines up, let the brother burn what doesn't
-## (1 mana), refill from the fragment arcs overhead (some orange +3) and
-## the stomp bounties themselves. Geometry guarantees: the first blob
-## stays clear of the entry landing, and every deck keeps >= 0.7*v of
-## tail so the bounce off its LAST blob (0.663*v of carry) lands ON deck,
-## never in the next gap. Teach-in: two short mild decks' worth, no megas.
+## SPELLBROS level (Neven's spec, round 5): UMBRA's structure, populated
+## with blobs. The band runs the standard generator's SKELETON — plain
+## gaps under the same rise rule, mega gaps (one built platform), climb
+## staircases up and down — but every deck is blob country: cramped
+## irregular lines (spacings mostly 0.12-0.26*v, some mid, some wide) so
+## no bounce rhythm survives more than a few crowns. LONG decks (~35%,
+## 5-9*v) carry the thickest walls, kept interesting by MID-AIR
+## PLATFORMS: thin one-way slabs ~175 px over the deck — hop up for a
+## blob-free stretch (some carry a fragment or a powerup), drop back
+## into the wall where they end. Stomp what lines up, let the brother
+## burn what doesn't (1 mana), refill from the fragment arcs overhead
+## (some orange +3) and the stomp bounties. Geometry guarantees: the
+## first blob stays clear of the entry landing, and every deck keeps
+## >= 0.7*v of tail so the bounce off its LAST blob (0.663*v of carry)
+## lands ON deck, never in the next gap. Teach-in: short mild decks —
+## no megas, no stairs, no floaters.
 func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	# wind-down into THE VOID: plain calm hops, nothing left to burn
 	if PHASE_VOID - d <= WIND_DOWN_M:
+		climb_dir = 0
+		climb_steps_left = 0
 		var out_gap := rng.randf_range(0.36, 0.46) * v
 		var out_w := rng.randf_range(500.0, 700.0)
 		var out_y := clampf(last_top_y + rng.randf_range(-30.0, 30.0), 780.0, 920.0)
@@ -717,30 +720,94 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 			"gap": out_gap, "width": out_w, "top_y": out_y, "mega": false,
 			"enemies": 0, "entities": out_used, "climb": 0,
 			"void": false, "pillar": false, "bros": true, "gkind": "out",
-			"blobs": 0, "stars": 0, "rise": out_rise, "speed": v,
+			"blobs": 0, "pads": 0, "stars": 0, "rise": out_rise, "speed": v,
 		}
 	var teach := _is_teach(d)
-	var top_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 700.0, 920.0)
-	# the gap: a plain jump, or a mega demanding one built platform —
-	# never two megas in a row, none in the teach-in
+	if not teach:
+		_update_climb_state(d)
+	# staircases, straight from the standard generator (UMBRA's structure):
+	# up-steps rise beyond jump height and demand one build each — blob-free,
+	# stairs are about building — and down-steps are easy drops
+	if climb_dir != 0:
+		var sgap := rng.randf_range(150.0, 230.0 if climb_dir == -1 else 240.0)
+		var sw := rng.randf_range(320.0, 480.0) if climb_dir == -1 \
+				else rng.randf_range(360.0, 520.0)
+		var sdy := -rng.randf_range(240.0, 300.0) if climb_dir == -1 \
+				else rng.randf_range(200.0, 280.0)
+		if climb_dir == -1:
+			climb_steps_left -= 1
+		var s_y := clampf(last_top_y + sdy, SKY_Y_MIN, BASE_Y_MAX)
+		var sx := next_x + sgap
+		_place_chunk(sx, s_y, sw)
+		var s_used := 0
+		if rng.randf() < MANA_CHANCE_CLIMB:
+			_place_coin(Vector2(sx + rng.randf_range(80.0, sw - 80.0), s_y - 60.0))
+			s_used = 1
+		var s_rise := maxf(0.0, last_top_y - s_y)
+		next_x = sx + sw
+		last_top_y = s_y
+		return {
+			"gap": sgap, "width": sw, "top_y": s_y, "mega": false,
+			"enemies": 0, "entities": s_used, "climb": climb_dir,
+			"void": false, "pillar": false, "bros": true, "gkind": "gaunt",
+			"blobs": 0, "pads": 0, "stars": 0, "rise": s_rise, "speed": v,
+		}
+	# the gap: standard-rule plain jump, or a mega demanding one built
+	# platform — never two megas in a row, none in the teach-in
 	var mega_gap: bool = not teach and not bros_mega_last and rng.randf() < 0.3
 	bros_mega_last = mega_gap
-	var gap := (rng.randf_range(0.95, 1.25) if mega_gap else rng.randf_range(0.36, 0.5)) * v
+	var gap: float
+	var dy: float
+	if mega_gap:
+		gap = rng.randf_range(0.95, 1.25) * v
+		dy = rng.randf_range(-40.0, 160.0)
+	else:
+		gap = rng.randf_range(GAP_MIN_FRAC, 0.5 if teach else GAP_MAX_FRAC) * v
+		# the standard rise rule: wide gaps never land higher
+		dy = rng.randf_range(0.0 if gap > GAP_RISE_FRAC * v else -GAP_MAX_RISE, 170.0)
+	if teach:
+		dy = rng.randf_range(-40.0, 40.0)
+	var top_y := clampf(last_top_y + dy, BASE_Y_MIN, 940.0)
 	if mega_gap:
 		# the reward for paying the crossing toll hangs over the emptiness
-		_place_coin(Vector2(next_x + gap * 0.5, top_y - 190.0))
-	# the deck: strict short/long alternation
-	bros_long = not bros_long and not teach
+		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
+	# the deck: mostly short pillars, ~35% long gauntlets
+	var long_deck: bool = not teach and rng.randf() < 0.35
 	var w: float
 	if teach:
 		w = rng.randf_range(2.0, 2.6) * v
-	elif bros_long:
-		w = rng.randf_range(5.0, 10.0) * v
+	elif long_deck:
+		w = rng.randf_range(5.0, 9.0) * v
 	else:
 		w = rng.randf_range(1.2, 1.7) * v
 	var lead := minf(rng.randf_range(0.5, 0.7) * v, w - 0.7 * v)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
+	# mid-air platforms over long decks: hop-up-able (rise <= 185 < 207 max
+	# jump), one-way, staggered with real deck stretches between them
+	var pads := 0
+	var pad_rise := 0.0
+	var pad_spans: Array = []
+	var pu := 0
+	var coins := 0
+	if long_deck:
+		var px := rng.randf_range(0.8, 1.2) * v
+		while px + 0.6 * v < w - 0.5 * v:
+			var pw := rng.randf_range(0.42, 0.6) * v
+			var pr := rng.randf_range(160.0, 185.0)
+			_place_float(x + px, top_y - pr, pw)
+			pad_spans.append([px, px + pw])
+			pad_rise = maxf(pad_rise, pr)
+			pads += 1
+			# the high road pays: a fragment — or occasionally a powerup,
+			# the band's only easy-to-take spot for one (blob-free by
+			# construction, walked into mid-run: Neven's standing rule)
+			if pu == 0 and rng.randf() < 0.12:
+				pu = _maybe_powerup(x + px, pw, top_y - pr, 1.0)
+			elif rng.randf() < 0.5:
+				_place_coin(Vector2(x + px + pw * 0.5, top_y - pr - 60.0))
+				coins += 1
+			px += pw + rng.randf_range(1.2, 1.8) * v
 	# the blob line: fill the deck, keeping the landable tail free
 	var bxs: Array = [lead]
 	while true:
@@ -749,9 +816,9 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 			sp = rng.randf_range(0.5, 0.8) * v
 		else:
 			var r := rng.randf()
-			if r < 0.6:
+			if r < 0.65:
 				sp = rng.randf_range(0.12, 0.26) * v  # the cramped wall
-			elif r < 0.85:
+			elif r < 0.87:
 				sp = rng.randf_range(0.28, 0.45) * v
 			else:
 				sp = rng.randf_range(0.5, 0.8) * v  # a breather
@@ -772,21 +839,30 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 			var sp: float = bxs[i] - bxs[i - 1]
 			smin = sp if smin == 0.0 else minf(smin, sp)
 			smax = maxf(smax, sp)
-	var coins := 0
 	for i in range(k - 1):
 		if rng.randf() < 0.35:
+			var cx: float = (bxs[i] + bxs[i + 1]) * 0.5
+			# never under a floater: a fragment at deck-200 inside a pad's
+			# span visually collides with the slab hanging at deck~175
+			var covered := false
+			for span: Array in pad_spans:
+				if cx >= span[0] and cx <= span[1]:
+					covered = true
+					break
+			if covered:
+				continue
 			var amt := 3 if rng.randf() < 0.18 else 1
-			_place_coin(Vector2(x + (bxs[i] + bxs[i + 1]) * 0.5, top_y - 200.0), amt)
+			_place_coin(Vector2(x + cx, top_y - 200.0), amt)
 			coins += 1
-	var pu := _maybe_powerup(x, w, top_y, 0.05)
 	var rise := maxf(0.0, last_top_y - top_y)
 	next_x = x + w
 	last_top_y = top_y
 	return {
-		"gap": gap, "width": w, "top_y": top_y, "mega": false,
+		"gap": gap, "width": w, "top_y": top_y, "mega": mega_gap,
 		"enemies": k, "entities": k + coins + pu + (1 if mega_gap else 0),
 		"climb": 0, "void": false, "pillar": false, "bros": true,
-		"gkind": "gaunt", "mgap": mega_gap, "long": bros_long, "blobs": k,
+		"gkind": "gaunt", "mgap": mega_gap, "long": long_deck, "blobs": k,
+		"pads": pads, "pad_rise": pad_rise,
 		"lead": lead, "smin": smin, "smax": smax, "tail": w - bxs[k - 1],
 		"stars": pu, "rise": rise, "speed": v,
 	}
@@ -881,9 +957,20 @@ func _place_ceiling(x: float, ceil_y: float, w: float) -> void:
 	add_child(chunk)
 
 
+## Thin one-way slab hovering over a long SPELLBROS deck: jump or stomp-
+## bounce up THROUGH it, land on top, run a blob-free stretch, drop off
+## the end back into the wall.
+func _place_float(x: float, top_y: float, w: float) -> void:
+	var chunk := GroundChunk.new(w, 26.0, true)
+	chunk.position = Vector2(x, top_y)
+	add_child(chunk)
+
+
 ## Occasional powerup for the themed bands (Neven: they should appear in
 ## later levels too, and always be easy to take): mid-deck at running
-## height, walked into mid-flow. 50/50 shield or star.
+## height, walked into mid-flow. 50/50 shield or star. SPRINGS decks and
+## SPELLBROS floaters roll this; BLOB BRIDGES never does (a stored double
+## jump would let the wizard skip the chain the band is about).
 func _maybe_powerup(x: float, w: float, top_y: float, chance: float) -> int:
 	if rng.randf() >= chance:
 		return 0

@@ -853,15 +853,17 @@ func _run_tests() -> void:
 	# EVERY deck opens with its left-edge beacon — a deck whose only light
 	# sat mid-deck read as a missing edge (Neven)
 	_check(umbrab["beacon"] == 80, "umbra decks always open with a beacon")
-	# SPELLBROS: every chunk is a blob deck, short and long strictly
-	# alternating, mega gaps mixed in, and the lines are cramped walls
-	# with irregular breathers — never a survivable bounce rhythm
+	# SPELLBROS: UMBRA's skeleton — staircases, megas, plain gaps — but
+	# every deck is a cramped blob wall, and long decks carry mid-air
+	# one-way refuges so they never flatten into one boring stomp line
 	var brosb := _probe(Levels.start_m(Levels.BROS) + 50.0, 80)
-	_check(brosb["gaunt"] == 80 and brosb["bmega"] > 5 and brosb["bmega"] < 40,
-			"spellbros: all blob decks, megas mixed in")
-	_check(brosb["blong"] > 20 and brosb["bshort"] > 20,
-			"spellbros alternates short and long decks")
-	_check(brosb["enemies"] > 600, "spellbros swarms with blobs")
+	_check(brosb["gaunt"] == 80 and brosb["bmega"] > 3 and brosb["bmega"] < 30,
+			"spellbros: blob decks with megas mixed in")
+	_check(brosb["climbs"] > 5, "spellbros staircases live (umbra structure)")
+	_check(brosb["blong"] > 4 and brosb["bshort"] > 15,
+			"spellbros mixes short pillars and long gauntlets")
+	_check(brosb["pads"] > 8, "spellbros long decks carry mid-air refuges")
+	_check(brosb["enemies"] > 250, "spellbros swarms with blobs")
 	_check(brosb["sp_lo"] < 0.28 and brosb["sp_hi"] > 0.5,
 			"spellbros spacing cramped and chaotic")
 	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
@@ -912,7 +914,6 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
-	main.spawner.bros_long = false
 	main.spawner.bros_mega_last = false
 	main.spawner.enemy_seen = true  # probes sample mid-run behavior
 	main.spawner.shield_given = true  # showcase done; steady-state sampling
@@ -924,7 +925,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "dfloor": 0, "dceil": 0,
 			"spring": 0, "svoid": 0, "gaunt": 0,
-			"blong": 0, "bshort": 0, "bmega": 0,
+			"blong": 0, "bshort": 0, "bmega": 0, "pads": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
@@ -981,32 +982,44 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["builds"] += ceilf(s["gap"] / one_build)
 		elif s.get("bros", false):
 			if s.get("gkind", "") == "gaunt":
-				if s.get("mgap", false):
+				if s["climb"] == -1:
+					stats["builds"] += 1.0  # up-stairs: one platform each
+				elif s["climb"] == 1:
+					pass  # descending stairs are easy drops
+				elif s.get("mgap", false):
 					# a mega gap IS the build; one platform must bridge it
 					stats["builds"] += 1.0
 					if s["gap"] > one_build:
 						stats["bad"] += 1
-				elif s["gap"] > 0.68 * v:
-					stats["bad"] += 1  # plain entry gaps stay jumpable
-				# the blob line: first blob clear of the entry landing, the
-				# cramped wall inside its bounds, and enough tail that the
-				# bounce off the LAST blob (0.663*v of carry) lands ON the
-				# deck, never in the next gap
-				if s["lead"] < 0.42 * v or s["lead"] > 0.75 * v:
-					stats["bad"] += 1
-				if s["tail"] < 0.66 * v:
-					stats["bad"] += 1
-				if s["blobs"] > 1:
-					if s["smin"] < 0.1 * v or s["smax"] > 0.85 * v:
-						stats["bad"] += 1
-					stats["sp_lo"] = minf(stats["sp_lo"], s["smin"] / v)
-					stats["sp_hi"] = maxf(stats["sp_hi"], s["smax"] / v)
-				if s.get("long", false):
-					stats["blong"] += 1
 				else:
-					stats["bshort"] += 1
-				if s.get("mgap", false):
-					stats["bmega"] += 1
+					# plain gaps follow the standard reach rule (rise cuts it)
+					var bdisc: float = 1170.0 * 1170.0 - 6600.0 * s["rise"]
+					if bdisc < 0.0 or s["gap"] > v * (1170.0 + sqrt(bdisc)) / 3300.0:
+						stats["bad"] += 1
+				if s["blobs"] > 0:
+					# the blob line: first blob clear of the entry landing,
+					# the cramped wall inside its bounds, and enough tail
+					# that the bounce off the LAST blob (0.663*v of carry)
+					# lands ON the deck, never in the next gap
+					if s["lead"] < 0.42 * v or s["lead"] > 0.75 * v:
+						stats["bad"] += 1
+					if s["tail"] < 0.66 * v:
+						stats["bad"] += 1
+					if s["blobs"] > 1:
+						if s["smin"] < 0.1 * v or s["smax"] > 0.85 * v:
+							stats["bad"] += 1
+						stats["sp_lo"] = minf(stats["sp_lo"], s["smin"] / v)
+						stats["sp_hi"] = maxf(stats["sp_hi"], s["smax"] / v)
+					if s.get("long", false):
+						stats["blong"] += 1
+					else:
+						stats["bshort"] += 1
+					if s.get("mgap", false):
+						stats["bmega"] += 1
+				# mid-air refuges stay hop-up-able (max jump height is 207)
+				stats["pads"] += s.get("pads", 0)
+				if s.get("pads", 0) > 0 and s.get("pad_rise", 0.0) > 195.0:
+					stats["bad"] += 1
 			elif s["gap"] > 0.68 * v:
 				stats["bad"] += 1  # wind-down: plain jumps
 		elif s.get("bridge", false):
