@@ -294,61 +294,28 @@ func _run_tests() -> void:
 	blob3.queue_free()
 	p.velocity = Vector2.ZERO
 
-	# the shield orb never precedes the first blob: the counter must come
-	# after the threat it answers
-	main.spawner.enemy_seen = false
-	main.spawner.climb_dir = 0
-	main.spawner.climb_steps_left = 0
-	main.spawner.flat_chunks_since_wave = 99
-	main.spawner.force_mega = false
-	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
-	# flags on: this test probes the RANDOM shield roll's ordering gate,
-	# not the guaranteed showcase (which has its own test below)
-	main.spawner.shield_given = true
-	main.spawner.star_given = true
-	var first_enemy := -1
-	var first_shield := -1
-	for i in range(300):
-		main.spawner.next_x = 80.0 * 100.0 + main.start_x
-		var sc: Dictionary = main.spawner._spawn_chunk()
-		if first_enemy == -1 and sc["enemies"] > 0:
-			first_enemy = i
-		if first_shield == -1 and sc["shields"] > 0:
-			first_shield = i
-	print("TEST shieldorder: first_enemy=%d first_shield=%d (expect both >= 0, enemy strictly first)" % [
-		first_enemy, first_shield])
-	_check(first_enemy >= 0 and first_shield > first_enemy, "shield only after first enemy")
-
-	# guaranteed powerup showcase: FOUNDATIONS always serves the shield by
-	# ~120 m and the star by ~150 m — mid-deck, at running height, on an
-	# enemy-free chunk — so both are learned before the themed bands
-	main.spawner.shield_given = false
+	# guaranteed star showcase: FOUNDATIONS always serves the double jump
+	# by ~150 m — mid-deck, at running height, on an enemy-free chunk —
+	# so it's learned before the themed bands. (No shield showcase: the
+	# generator never spawns shields, asserted after the band probes.)
 	main.spawner.star_given = false
-	main.spawner.enemy_seen = true
 	main.spawner.climb_dir = 0
 	main.spawner.climb_steps_left = 0
 	main.spawner.flat_chunks_since_wave = 0  # no climb wave on these chunks
 	main.spawner.force_mega = false
-	main.spawner.next_x = 116.0 * 100.0 + main.start_x  # past the force line
-	var shc: Dictionary = main.spawner._spawn_chunk()
-	main.spawner.next_x = 141.0 * 100.0 + main.start_x
+	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
+	main.spawner.next_x = 141.0 * 100.0 + main.start_x  # past the force line
 	var stc: Dictionary = main.spawner._spawn_chunk()
-	var sh_pu: ShieldPickup = null
 	var st_pu: StarPickup = null
 	for c in main.spawner.get_children():
-		if c is ShieldPickup:
-			sh_pu = c
-		elif c is StarPickup:
+		if c is StarPickup:
 			st_pu = c
-	var sh_easy: bool = shc["shields"] == 1 and sh_pu != null \
-			and absf(sh_pu.position.y - (shc["top_y"] - 60.0)) < 0.5
 	var st_easy: bool = stc["stars"] == 1 and st_pu != null \
 			and absf(st_pu.position.y - (stc["top_y"] - 60.0)) < 0.5
-	print("TEST showcase: shield=%s star=%s calm=%s (expect all true)" % [
-		sh_easy, st_easy, shc["enemies"] == 0 and stc["enemies"] == 0])
-	_check(sh_easy and st_easy and shc["enemies"] == 0 and stc["enemies"] == 0,
-			"guaranteed easy powerup showcase in FOUNDATIONS")
-	main.spawner.shield_given = true
+	print("TEST showcase: star=%s calm=%s (expect both true)" % [
+		st_easy, stc["enemies"] == 0])
+	_check(st_easy and stc["enemies"] == 0,
+			"guaranteed easy star showcase in FOUNDATIONS")
 	main.spawner.star_given = true
 
 	# park the wizard on a fresh platform so the star test starts grounded
@@ -892,6 +859,16 @@ func _run_tests() -> void:
 	_check(bros_out["enemies"] == 0 and bros_out["mega"] == 0, "spellbros wind-down calm")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
+	# shields NEVER spawn (Neven: a held shield intercepts a lethal touch
+	# before the brother's burn, pre-empting the SPELLBROS reveal — and a
+	# shield carries any distance, so no earlier band may serve one). The
+	# probes above generated thousands of chunks across every band; not
+	# one may have produced an orb.
+	var stray_shields := 0
+	for c in main.spawner.get_children():
+		if c is ShieldPickup:
+			stray_shields += 1
+	_check(stray_shields == 0, "no shield ever spawned by the generator")
 	# teach-ins: every level's first ~45 m is its mechanic in gentle form
 	var teach_spring := _probe(Levels.start_m(Levels.SPRINGS) + 10.0, 80)
 	_check(teach_spring["spring"] == 80 and teach_spring["enemies"] == 0 \
@@ -933,9 +910,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
 	main.spawner.bros_mega_last = false
-	main.spawner.enemy_seen = true  # probes sample mid-run behavior
-	main.spawner.shield_given = true  # showcase done; steady-state sampling
-	main.spawner.star_given = true
+	main.spawner.star_given = true  # showcase done; steady-state sampling
 	main.spawner.flip_on_floor = true
 	main.spawner.flip_strip_start = 0.0
 	main.spawner.flip_ceil_y = 0.0
