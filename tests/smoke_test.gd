@@ -1035,14 +1035,15 @@ func _probe(d: float, n: int) -> Dictionary:
 					stats["bad"] += 1
 				# flow geometry: first blob one edge-jump out (0.5*v), a
 				# double's second one passive bounce later (0.6*v) — or one
-				# stomp-refresh jump later (1.2*v: the natural AFTER-apex tap
-				# carry; 1.08 was the at-apex figure and got overshot) — and
+				# LATE stomp-refresh jump later (1.3*v: the end of the
+				# possible carry — max fall-through is ~1.31*v, so the blob
+				# can no longer be overshot; 1.08 and 1.2 both were) — and
 				# the bounce off the last blob (0.71*v of carry) must land
 				# INSIDE the far deck, never past it
 				stats["b1err"] = maxf(stats["b1err"], absf(s["b1"] - 0.5 * v))
 				var blast: float = s["b1"]
 				if s["blobs"] == 2:
-					var want_sp := (1.2 if s.get("bact", false) else 0.6) * v
+					var want_sp := (1.3 if s.get("bact", false) else 0.6) * v
 					stats["bsperr"] = maxf(stats["bsperr"],
 							absf(s["b2"] - s["b1"] - want_sp))
 					blast = s["b2"]
