@@ -659,12 +659,11 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 		b.speed = enemy_speed_for(d)
 		add_child(b)
 
+	# NO powerups in this band (Neven): a stored double jump lets the wizard
+	# sail clean over the blob line, and the chain IS the level — nothing
+	# may spawn here that lets the player skip playing it
 	var used := blobs
-	var pu := 0
-	if used < budget:
-		pu = _maybe_powerup(x, w, top_y, 0.05)
-		used += pu
-	if used < budget and pu == 0 and rng.randf() < 0.5:
+	if used < budget and rng.randf() < 0.5:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
 		used += 1
 
@@ -677,7 +676,7 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 		"void": false, "pillar": false, "bridge": true, "bkind": "blob",
 		"blobs": blobs, "b1": blob_xs[0],
 		"b2": blob_xs[1] if blobs == 2 else 0.0, "bact": active,
-		"stars": pu, "rise": rise, "speed": v,
+		"stars": 0, "rise": rise, "speed": v,
 	}
 
 

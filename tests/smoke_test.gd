@@ -828,6 +828,9 @@ func _run_tests() -> void:
 	# the band alternates rhythms: passive-flow doubles AND apex-tap actives
 	_check(bridgeb["bact"] > 10 and bridgeb["bpas"] > 10,
 			"bridges mix passive and apex-tap doubles")
+	# no powerups in the band (Neven): a stored double jump would let the
+	# wizard sail over the blob line — the chain IS the level
+	_check(bridgeb["stars"] == 0, "bridges spawn no powerups")
 	# bridges wind-down: the corridor is entered calm — no blobs at the end
 	var bridge_out := _probe(Levels.start_m(Levels.FLIPSIDE) - 20.0, 80)
 	_check(bridge_out["bridge"] == 80 and bridge_out["enemies"] == 0,
