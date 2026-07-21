@@ -113,6 +113,13 @@ var spring_deck_left := 3
 # threat it answers; the orb means nothing before a blob has been met)
 var enemy_seen := false
 
+# Guaranteed powerup showcase (Neven): FOUNDATIONS must serve BOTH
+# powerups between 80 and 150 m so they're met and understood before the
+# themed bands. One flag each per run; forced near the window's end if
+# the rolls never landed one.
+var shield_given := false
+var star_given := false
+
 
 func _ready() -> void:
 	rng.randomize()
@@ -234,11 +241,32 @@ func _spawn_chunk() -> Dictionary:
 		_place_coin(Vector2(x + 90.0, top_y - 60.0))
 		used += 1
 
-	# enemies (never on climb stairs — those are about building — and never
-	# in a teach-in stretch)
+	# GUARANTEED showcase (see the flags): shield between ~80-120 m, star
+	# between ~110-150 m — mid-deck, at running height, on a chunk kept
+	# enemy-free — the pickup must be walked into, never fought for. The
+	# shield still never precedes the first blob.
+	var stars := 0
+	var shields := 0
+	if lv == 0 and climb_dir == 0 and w >= 400.0:
+		if not shield_given and enemy_seen and d >= 80.0 \
+				and (d >= 115.0 or rng.randf() < 0.3):
+			_place_shield(Vector2(x + w * 0.5, top_y - 60.0))
+			shield_given = true
+			shields = 1
+			used += 1
+		elif not star_given and d >= 110.0 \
+				and (d >= 140.0 or rng.randf() < 0.3):
+			_place_star(Vector2(x + w * 0.5, top_y - 60.0))
+			star_given = true
+			stars = 1
+			used += 1
+
+	# enemies (never on climb stairs — those are about building — never in
+	# a teach-in stretch, and never sharing a deck with a showcase powerup)
 	var enemy_before := enemy_seen  # the shield gate reads the PRE-chunk state
 	var enemies := 0
-	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not calm:
+	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not calm \
+			and stars + shields == 0:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
 		if rng.randf() < chance:
 			enemies = 1
@@ -283,23 +311,21 @@ func _spawn_chunk() -> Dictionary:
 			_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), coin_y))
 		used += 1
 
-	# rare Star of Levity: a stored double jump. Hung over the SAFE middle of
-	# an enemy-free deck at plain-jump height — the old high, edge-hugging,
-	# blob-adjacent spots read as bait (Neven). Same entity budget.
-	var stars := 0
+	# rare Star of Levity: a stored double jump. MID-DECK at RUNNING height
+	# on an enemy-free deck — powerups spawned up at apex height were hard
+	# to pick up and read as bait (Neven, twice). Same entity budget.
 	if d >= PHASE_ENEMY and used < budget and enemies == 0 and not mega \
-			and rng.randf() < 0.1:
-		_place_star(Vector2(x + rng.randf_range(w * 0.3, w * 0.7), top_y - 190.0))
+			and stars + shields == 0 and rng.randf() < 0.1:
+		_place_star(Vector2(x + rng.randf_range(w * 0.35, w * 0.65), top_y - 60.0))
 		used += 1
 		stars = 1
 
-	# purple shield orb: FOUNDATIONS only — one forgiven blob mistake in the
-	# band that teaches blobs. Mid-deck like the star, same entity budget.
-	# Gated on a blob already standing EARLIER in the run, never before.
-	var shields := 0
-	if lv == 0 and enemy_before and used < budget and stars == 0 \
+	# purple shield orb: one forgiven blob mistake — in ANY standard band
+	# now, not just FOUNDATIONS (Neven: powerups in later levels too).
+	# Same easy mid-deck spot; still never before the run's first blob.
+	if enemy_before and used < budget and stars + shields == 0 \
 			and rng.randf() < 0.07:
-		_place_shield(Vector2(x + rng.randf_range(w * 0.3, w * 0.7), top_y - 150.0))
+		_place_shield(Vector2(x + rng.randf_range(w * 0.35, w * 0.65), top_y - 60.0))
 		used += 1
 		shields = 1
 
@@ -337,8 +363,9 @@ func _spawn_spring_chunk(d: float, v: float) -> Dictionary:
 	var rise := maxf(0.0, last_top_y - top_y)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
-	var used := 0
-	if rng.randf() < 0.35:
+	var pu := _maybe_powerup(x, w, top_y, 0.05)
+	var used := pu
+	if used == 0 and rng.randf() < 0.35:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
 		used = 1
 	next_x = x + w
@@ -347,7 +374,7 @@ func _spawn_spring_chunk(d: float, v: float) -> Dictionary:
 		"gap": gap, "width": w, "top_y": top_y, "mega": false,
 		"enemies": 0, "entities": used, "climb": 0,
 		"void": false, "pillar": false, "spring": true, "svoid": false,
-		"stars": 0, "rise": rise, "speed": v,
+		"stars": pu, "rise": rise, "speed": v,
 	}
 
 
@@ -625,7 +652,11 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 		add_child(b)
 
 	var used := blobs
-	if used < budget and rng.randf() < 0.5:
+	var pu := 0
+	if used < budget:
+		pu = _maybe_powerup(x, w, top_y, 0.05)
+		used += pu
+	if used < budget and pu == 0 and rng.randf() < 0.5:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
 		used += 1
 
@@ -638,7 +669,7 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 		"void": false, "pillar": false, "bridge": true, "bkind": "blob",
 		"blobs": blobs, "b1": blob_xs[0],
 		"b2": blob_xs[1] if blobs == 2 else 0.0, "bact": active,
-		"stars": 0, "rise": rise, "speed": v,
+		"stars": pu, "rise": rise, "speed": v,
 	}
 
 
@@ -832,6 +863,20 @@ func _place_ceiling(x: float, ceil_y: float, w: float) -> void:
 	chunk.ceiling = true
 	chunk.position = Vector2(x, ceil_y - GroundChunk.THICK)
 	add_child(chunk)
+
+
+## Occasional powerup for the themed bands (Neven: they should appear in
+## later levels too, and always be easy to take): mid-deck at running
+## height, walked into mid-flow. 50/50 shield or star.
+func _maybe_powerup(x: float, w: float, top_y: float, chance: float) -> int:
+	if rng.randf() >= chance:
+		return 0
+	var pos := Vector2(x + w * 0.5, top_y - 60.0)
+	if enemy_seen and rng.randf() < 0.5:
+		_place_shield(pos)
+	else:
+		_place_star(pos)
+	return 1
 
 
 func _place_star(pos: Vector2) -> void:

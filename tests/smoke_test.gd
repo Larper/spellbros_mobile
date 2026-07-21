@@ -302,6 +302,10 @@ func _run_tests() -> void:
 	main.spawner.flat_chunks_since_wave = 99
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
+	# flags on: this test probes the RANDOM shield roll's ordering gate,
+	# not the guaranteed showcase (which has its own test below)
+	main.spawner.shield_given = true
+	main.spawner.star_given = true
 	var first_enemy := -1
 	var first_shield := -1
 	for i in range(300):
@@ -314,6 +318,38 @@ func _run_tests() -> void:
 	print("TEST shieldorder: first_enemy=%d first_shield=%d (expect both >= 0, enemy strictly first)" % [
 		first_enemy, first_shield])
 	_check(first_enemy >= 0 and first_shield > first_enemy, "shield only after first enemy")
+
+	# guaranteed powerup showcase: FOUNDATIONS always serves the shield by
+	# ~120 m and the star by ~150 m — mid-deck, at running height, on an
+	# enemy-free chunk — so both are learned before the themed bands
+	main.spawner.shield_given = false
+	main.spawner.star_given = false
+	main.spawner.enemy_seen = true
+	main.spawner.climb_dir = 0
+	main.spawner.climb_steps_left = 0
+	main.spawner.flat_chunks_since_wave = 0  # no climb wave on these chunks
+	main.spawner.force_mega = false
+	main.spawner.next_x = 116.0 * 100.0 + main.start_x  # past the force line
+	var shc: Dictionary = main.spawner._spawn_chunk()
+	main.spawner.next_x = 141.0 * 100.0 + main.start_x
+	var stc: Dictionary = main.spawner._spawn_chunk()
+	var sh_pu: ShieldPickup = null
+	var st_pu: StarPickup = null
+	for c in main.spawner.get_children():
+		if c is ShieldPickup:
+			sh_pu = c
+		elif c is StarPickup:
+			st_pu = c
+	var sh_easy: bool = shc["shields"] == 1 and sh_pu != null \
+			and absf(sh_pu.position.y - (shc["top_y"] - 60.0)) < 0.5
+	var st_easy: bool = stc["stars"] == 1 and st_pu != null \
+			and absf(st_pu.position.y - (stc["top_y"] - 60.0)) < 0.5
+	print("TEST showcase: shield=%s star=%s calm=%s (expect all true)" % [
+		sh_easy, st_easy, shc["enemies"] == 0 and stc["enemies"] == 0])
+	_check(sh_easy and st_easy and shc["enemies"] == 0 and stc["enemies"] == 0,
+			"guaranteed easy powerup showcase in FOUNDATIONS")
+	main.spawner.shield_given = true
+	main.spawner.star_given = true
 
 	# park the wizard on a fresh platform so the star test starts grounded
 	main.coins = 5
@@ -816,8 +852,10 @@ func _run_tests() -> void:
 	var outro := _probe(Levels.start_m(Levels.UMBRA) - 20.0, 80)
 	_check(outro["flip"] == 80 and outro["dead"] == 0 and outro["min_top"] >= 800.0,
 			"flipside outro floor")
+	# fixed bounds, not a cross-probe comparison: two random draws racing
+	# each other flakes; the means (48 vs 24 of 80) sit far outside these
 	var teach_void := _probe(TerrainSpawner.PHASE_VOID + 10.0, 80)
-	_check(teach_void["pillars"] > voidb["pillars"], "void teach-in: denser pillars")
+	_check(teach_void["pillars"] >= 33 and voidb["pillars"] <= 45, "void teach-in: denser pillars")
 
 	print("SMOKE RESULT: %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	quit(0 if fails == 0 else 1)
@@ -833,6 +871,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
 	main.spawner.enemy_seen = true  # probes sample mid-run behavior
+	main.spawner.shield_given = true  # showcase done; steady-state sampling
+	main.spawner.star_given = true
 	main.spawner.flip_on_floor = true
 	main.spawner.flip_strip_start = 0.0
 	main.spawner.flip_ceil_y = 0.0
