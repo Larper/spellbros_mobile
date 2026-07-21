@@ -842,8 +842,9 @@ func _run_tests() -> void:
 	_check(brosb["sblob"] > 10, "spellbros staircases carry squatter blobs")
 	_check(brosb["blong"] > 4 and brosb["bshort"] > 10,
 			"spellbros mixes short pillars and long gauntlets")
-	_check(brosb["pads"] > 20, "spellbros second storey is dense")
-	_check(brosb["pblob"] > 12, "spellbros second storey carries blobs")
+	_check(brosb["pads"] > 40, "spellbros air storeys are dense")
+	_check(brosb["stor"] >= 2, "spellbros stacks multiple storeys")
+	_check(brosb["pblob"] > 25, "spellbros air storeys carry blobs")
 	# regression floor, not the tune: typical samples run ~600 blobs per 80
 	# chunks, but climb-heavy / long-poor samples legitimately dip
 	_check(brosb["enemies"] > 300, "spellbros reads as impossible")
@@ -919,7 +920,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"dead": 0, "dfloor": 0, "dceil": 0,
 			"spring": 0, "svoid": 0, "gaunt": 0,
 			"blong": 0, "bshort": 0, "bmega": 0, "pads": 0, "gfrag": 0,
-			"sblob": 0, "pblob": 0, "sout": 0,
+			"sblob": 0, "pblob": 0, "sout": 0, "stor": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
@@ -1015,9 +1016,11 @@ func _probe(d: float, n: int) -> Dictionary:
 						stats["bshort"] += 1
 					if s.get("mgap", false):
 						stats["bmega"] += 1
-					# the second storey stays hop-up-able (max jump is 207)
+					# every storey stays hop-up-able from the one below
+					# (per-storey rise <= 185 < 207 max jump height)
 					stats["pads"] += s.get("pads", 0)
 					stats["pblob"] += s.get("pblobs", 0)
+					stats["stor"] = maxi(stats["stor"], int(s.get("storeys", 0)))
 					if s.get("pads", 0) > 0 and s.get("pad_rise", 0.0) > 195.0:
 						stats["bad"] += 1
 			elif s["gap"] > 0.68 * v:

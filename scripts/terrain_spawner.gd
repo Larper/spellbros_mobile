@@ -712,9 +712,9 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 ## platform), climb staircases up and down — but now EVERYTHING is blob
 ## country: the staircases carry squatters on their steps (round 5 left
 ## them bare — Neven), every deck runs a cramped irregular wall
-## (spacings mostly 0.12-0.22*v), and LONG decks (~40%, 5-9*v) stack a
-## second storey of DENSE mid-air one-way platforms — most of them
-## blob-ridden too, some carrying a fragment or the band's powerup spot.
+## (spacings mostly 0.12-0.22*v), and LONG decks (~40%, 5-9*v) stack
+## 2-3 STOREYS of dense mid-air one-way platforms — most of them
+## blob-ridden too, some carrying a fragment or the band's star spot.
 ## Stomp what lines up, let the brother burn what doesn't (1 mana each),
 ## refill from the thick fragment arcs (some orange +3) and the stomp
 ## bounties. Geometry guarantees: the first deck blob stays clear of the
@@ -817,39 +817,51 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
 	var espeed := enemy_speed_for(d)
-	# the second storey over long decks: DENSE mid-air one-way platforms
-	# (hop-up-able: rise <= 185 < 207 max jump), most carrying their own
-	# squatter — the high road is blob country too, not a refuge (round 5
-	# left them empty and sparse — Neven: BORING). Blob-free pads pay a
-	# fragment or the band's one easy-to-take powerup spot instead.
+	# THE AIR IS FULL over long decks: 2-3 STOREYS of dense one-way
+	# platforms, each 150-185 px above the one below (hop-up-able:
+	# < 207 max jump) and blob-ridden like the deck itself. One storey
+	# was cheesable (Neven: build a private lane right above it and run
+	# the whole band untouched) — now every buildable lane inside the
+	# static frame is already blob country, and above the top storey the
+	# wizard flies blind over the camera. Blob-free pads pay a fragment
+	# or the band's one easy-to-take star spot instead.
 	var pads := 0
 	var pblobs := 0
 	var pad_rise := 0.0
+	var storeys := 0
 	var pad_spans: Array = []
 	var pu := 0
 	var coins := 0
 	if long_deck:
-		var px := rng.randf_range(0.5, 0.9) * v
-		while px + 0.5 * v < w - 0.5 * v:
-			var pw := rng.randf_range(0.42, 0.6) * v
+		var base := top_y
+		for st in range(2 + (1 if rng.randf() < 0.5 else 0)):
 			var pr := rng.randf_range(150.0, 185.0)
-			_place_float(x + px, top_y - pr, pw)
-			pad_spans.append([px, px + pw])
+			var lvl_y := base - pr
+			if lvl_y < 320.0:
+				break  # stay inside the static frame (view top is 188)
+			storeys += 1
 			pad_rise = maxf(pad_rise, pr)
-			pads += 1
-			var squat := rng.randf() < 0.7
-			if squat:
-				pblobs += 1
-				var pb := SpikeBlob.new(x + px + 50.0, x + px + pw - 50.0)
-				pb.position = Vector2(x + px + pw * 0.5, top_y - pr - 30.0)
-				pb.speed = espeed
-				add_child(pb)
-			elif pu == 0 and rng.randf() < 0.2:
-				pu = _maybe_star(x + px, pw, top_y - pr, 1.0)
-			else:
-				_place_coin(Vector2(x + px + pw * 0.5, top_y - pr - 60.0))
-				coins += 1
-			px += pw + rng.randf_range(0.35, 0.7) * v
+			var px := rng.randf_range(0.4, 0.9) * v
+			while px + 0.5 * v < w - 0.5 * v:
+				var pw := rng.randf_range(0.42, 0.6) * v
+				_place_float(x + px, lvl_y, pw)
+				if st == 0:
+					# only the first storey shadows the deck's coin arcs
+					pad_spans.append([px, px + pw])
+				pads += 1
+				if rng.randf() < 0.7:
+					pblobs += 1
+					var pb := SpikeBlob.new(x + px + 50.0, x + px + pw - 50.0)
+					pb.position = Vector2(x + px + pw * 0.5, lvl_y - 30.0)
+					pb.speed = espeed
+					add_child(pb)
+				elif pu == 0 and rng.randf() < 0.2:
+					pu = _maybe_star(x + px, pw, lvl_y, 1.0)
+				else:
+					_place_coin(Vector2(x + px + pw * 0.5, lvl_y - 60.0))
+					coins += 1
+				px += pw + rng.randf_range(0.35, 0.7) * v
+			base = lvl_y
 	# the blob line: fill the deck, keeping the landable tail free
 	var bxs: Array = [lead]
 	while true:
@@ -905,7 +917,7 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 		"entities": k + pblobs + coins + pu + (1 if mega_gap else 0),
 		"climb": 0, "void": false, "pillar": false, "bros": true,
 		"gkind": "gaunt", "mgap": mega_gap, "long": long_deck, "blobs": k,
-		"pads": pads, "pblobs": pblobs, "pad_rise": pad_rise,
+		"pads": pads, "pblobs": pblobs, "pad_rise": pad_rise, "storeys": storeys,
 		"lead": lead, "smin": smin, "smax": smax, "tail": w - bxs[k - 1],
 		"stars": pu, "rise": rise, "speed": v,
 	}
