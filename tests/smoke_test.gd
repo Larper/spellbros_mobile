@@ -722,14 +722,17 @@ func _run_tests() -> void:
 	var bridge_out := _probe(Levels.start_m(Levels.FLIPSIDE) - 20.0, 80)
 	_check(bridge_out["bridge"] == 80 and bridge_out["enemies"] == 0,
 			"bridges wind-down calm")
-	# FLIPSIDE band: all corridor chunks, no enemies, chains + some dead zones
-	var flipb := _probe(Levels.start_m(Levels.FLIPSIDE) + 50.0, 80)
-	_check(flipb["flip"] == 80 and flipb["enemies"] == 0, "flipside corridor band")
-	_check(flipb["dead"] > 0 and flipb["dead"] < 40, "flipside dead zones present but not dominant")
+	# FLIPSIDE band: all corridor chunks, no enemies, chains + some dead
+	# zones — cutting BOTH surfaces now (ceiling cuts are rarer: they need
+	# headroom, so this probe runs 200 chunks to see them reliably)
+	var flipb := _probe(Levels.start_m(Levels.FLIPSIDE) + 50.0, 200)
+	_check(flipb["flip"] == 200 and flipb["enemies"] == 0, "flipside corridor band")
+	_check(flipb["dead"] > 10 and flipb["dead"] < 100, "flipside dead zones present but not dominant")
+	_check(flipb["dfloor"] > 0 and flipb["dceil"] > 0, "flipside dead zones cut both surfaces")
 	# dead zones must be affordable: crystals in the band outpay the builds
 	_check(flipb["mana"] >= flipb["builds"] * 0.8, "flipside build economy")
 	# and the crystals draw the flip line: transit-arc trails on most chains
-	_check(flipb["arc"] > 20, "flipside crystals ride the flip arcs")
+	_check(flipb["arc"] > 50, "flipside crystals ride the flip arcs")
 	# UMBRA runs the standard generator but RICH: deck-start beacons plus a
 	# raised crystal chance, because mana is sight there (Neven: it starved)
 	var umbrab := _probe(Levels.start_m(Levels.UMBRA) + 100.0, 80)
@@ -790,9 +793,11 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.enemy_seen = true  # probes sample mid-run behavior
 	main.spawner.flip_on_floor = true
 	main.spawner.flip_strip_start = 0.0
+	main.spawner.flip_ceil_y = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
-			"dead": 0, "spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
+			"dead": 0, "dfloor": 0, "dceil": 0,
+			"spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0,
@@ -824,6 +829,10 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["flip"] += 1
 		if s.get("dead", false):
 			stats["dead"] += 1
+			if s.get("dceil", false):
+				stats["dceil"] += 1
+			else:
+				stats["dfloor"] += 1
 		if s.get("spring", false):
 			stats["spring"] += 1
 		if s.get("svoid", false):

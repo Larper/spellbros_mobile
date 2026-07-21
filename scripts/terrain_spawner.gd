@@ -102,6 +102,7 @@ var void_y := START_GROUND_Y - 120.0
 # (true on entering the band — he arrives running the floor)
 var flip_on_floor := true
 var flip_strip_start := 0.0  # left edge of the last chain strip placed
+var flip_ceil_y := 0.0  # walkable face y of the last ceiling strip placed
 
 # SPRINGS rhythm state: pillars left in the current easy deck section;
 # when it reaches 0 the next chunk is a void crossing
@@ -404,9 +405,9 @@ func _spawn_spring_void(d: float, v: float) -> Dictionary:
 ## on one surface. The flip transit takes ~0.54 s of fall, so strips are
 ## sized (>= 0.75*v) to guarantee a landing on the far strip when flipping
 ## anywhere in the shared window.
-## DEAD ZONES (FLIP_DEAD_CHANCE, floor side only): both surfaces vanish for
-## 0.8-1.2*v — beyond any jump, but one solid built platform (they work
-## from both gravities here) always bridges it. Mana pressure, meet flips.
+## DEAD ZONES (FLIP_DEAD_CHANCE, from EITHER lane): both surfaces vanish —
+## beyond any jump, but one solid built platform (they work from both
+## gravities here) always bridges it. Mana pressure, meet flips.
 func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var teach := _is_teach(d)
 	# wind-down: hand the run back to plain floor before the next level
@@ -440,29 +441,49 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 	var ov := (0.45 if teach else 0.30) * v
 	var floor_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 800.0, 940.0)
 
-	# dead zone: only rolled while the wizard's lane is the floor. There is
-	# no jump in this level, so crossing = run off the edge, catch yourself
-	# on ONE pad built near deck height, run off it again. Gaps are sized
-	# for a single pad and the far deck steps DOWN so the drift has room.
-	# None near the wind-down: no hole right where gravity gets handed back.
-	if not teach and flip_on_floor and out_left > WIND_DOWN_M + 20.0 \
+	# dead zone, rolled from EITHER lane (round 2 only cut the floor —
+	# Neven: ceiling runs should meet gaps too). There is no jump in this
+	# level, so crossing = run off the edge, catch yourself on ONE solid
+	# pad built near the lost surface's height, run off it again. The far
+	# strip always steps AWAY from the corridor middle (down for floor
+	# runs, UP for ceiling runs) so the run-off drift has room to land.
+	# A ceiling cut needs that headroom to exist inside the 800..940 floor
+	# band, so it only rolls while the corridor rides low (face >= 310).
+	# None near the wind-down: no hole right where gravity is handed back.
+	var dead_ok := flip_on_floor or flip_ceil_y >= 310.0
+	if not teach and dead_ok and out_left > WIND_DOWN_M + 20.0 \
 			and rng.randf() < FLIP_DEAD_CHANCE:
 		var gap := rng.randf_range(0.45 * v, 0.7 * v)
 		var w := rng.randf_range(0.7 * v, 1.0 * v)
-		var far_y := clampf(floor_y + rng.randf_range(60.0, 110.0), 800.0, 940.0)
 		var x := next_x + gap
-		_place_chunk(x, far_y, w)
 		var used := 0
-		if rng.randf() < 0.7:
-			# the reward for paying the bridge toll hangs over the emptiness
-			_place_coin(Vector2(next_x + gap * 0.5, floor_y - 240.0))
-			used = 1
+		var far_y: float
+		if flip_on_floor:
+			far_y = clampf(floor_y + rng.randf_range(60.0, 110.0), 800.0, 940.0)
+			_place_chunk(x, far_y, w)
+			if rng.randf() < 0.7:
+				# the reward for paying the bridge toll hangs over the emptiness
+				_place_coin(Vector2(next_x + gap * 0.5, floor_y - 240.0))
+				used = 1
+		else:
+			# mirrored off the ACTUAL face the wizard runs (never the drifted
+			# floor bookkeeping: a far ceiling even a hair lower than the
+			# takeoff face is a wall to an upward-falling runner)
+			var face := flip_ceil_y \
+					- rng.randf_range(60.0, minf(110.0, flip_ceil_y - 240.0))
+			_place_ceiling(x, face, w)
+			flip_ceil_y = face
+			far_y = face + FLIP_CORRIDOR
+			if rng.randf() < 0.7:
+				_place_coin(Vector2(next_x + gap * 0.5, face + 240.0))
+				used = 1
 		next_x = x + w
 		last_top_y = far_y
 		return {
 			"gap": gap, "width": w, "top_y": far_y, "mega": false,
 			"enemies": 0, "entities": used, "climb": 0,
 			"void": false, "pillar": false, "flip": true, "dead": true,
+			"dceil": not flip_on_floor,
 			"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
 		}
 
@@ -487,6 +508,7 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 		used = 3
 	if flip_on_floor:
 		_place_ceiling(start, floor_y - FLIP_CORRIDOR, w)
+		flip_ceil_y = floor_y - FLIP_CORRIDOR
 	else:
 		_place_chunk(start, floor_y, w)
 		last_top_y = floor_y
