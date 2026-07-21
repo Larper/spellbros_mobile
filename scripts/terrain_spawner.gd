@@ -370,18 +370,27 @@ func _spawn_spring_chunk(d: float, v: float) -> Dictionary:
 	var rise := maxf(0.0, last_top_y - top_y)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
+	# a fragment IN the pillar gap (Neven: springing the holes between
+	# pillars ran the pool dry — the flight path itself must pay). Hung
+	# over the gap above the higher rim, where both a plain jump and a
+	# spring launch sweep it; sometimes the ORANGE +3.
+	var gfrag := 0
+	if rng.randf() < 0.6:
+		var fy := minf(last_top_y, top_y) - rng.randf_range(160.0, 230.0)
+		_place_coin(Vector2(next_x + gap * 0.5, fy), 3 if rng.randf() < 0.2 else 1)
+		gfrag = 1
 	var pu := _maybe_powerup(x, w, top_y, 0.05)
-	var used := pu
-	if used == 0 and rng.randf() < 0.35:
+	var used := gfrag + pu
+	if pu == 0 and rng.randf() < 0.35:
 		_place_coin(Vector2(x + rng.randf_range(80.0, w - 80.0), top_y - 60.0))
-		used = 1
+		used += 1
 	next_x = x + w
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": false,
 		"enemies": 0, "entities": used, "climb": 0,
 		"void": false, "pillar": false, "spring": true, "svoid": false,
-		"stars": pu, "rise": rise, "speed": v,
+		"gfrag": gfrag, "stars": pu, "rise": rise, "speed": v,
 	}
 
 

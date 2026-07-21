@@ -818,6 +818,9 @@ func _run_tests() -> void:
 	_check(springb["mana"] >= springb["builds"] * 0.8, "springs pad economy")
 	# the rhythm: easy deck sections split by void crossings (~1 in 3-5)
 	_check(springb["svoid"] > 8 and springb["svoid"] < 40, "springs deck/void rhythm")
+	# fragments hang IN the pillar gaps (Neven: springing the holes between
+	# pillars ran the pool dry — the flight path itself must pay)
+	_check(springb["gfrag"] > 15, "springs pillar gaps carry fragments")
 	# BLOB BRIDGES band: EVERY gap is a blob bridge (singles and doubles),
 	# and the chain geometry holds exactly — first blob one edge-jump out,
 	# doubles one passive bounce apart
@@ -925,7 +928,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "dfloor": 0, "dceil": 0,
 			"spring": 0, "svoid": 0, "gaunt": 0,
-			"blong": 0, "bshort": 0, "bmega": 0, "pads": 0,
+			"blong": 0, "bshort": 0, "bmega": 0, "pads": 0, "gfrag": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
@@ -952,6 +955,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["pillars"] += 1
 		stats["stars"] += s["stars"]
 		stats["beacon"] += s.get("beacon", 0)
+		stats["gfrag"] += s.get("gfrag", 0)
 		if s.get("bridge", false):
 			stats["bridge"] += 1
 		if s.get("flip", false):
