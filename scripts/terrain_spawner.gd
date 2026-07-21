@@ -108,6 +108,11 @@ var flip_ceil_y := 0.0  # walkable face y of the last ceiling strip placed
 # when it reaches 0 the next chunk is a void crossing
 var spring_deck_left := 3
 
+# SPELLBROS rhythm state: strict short/long deck alternation, and megas
+# never twice in a row
+var bros_long := false
+var bros_mega_last := false
+
 # FOUNDATIONS: true once the first blob has been placed this run — the
 # shield orb only spawns behind it (the counter must never precede the
 # threat it answers; the orb means nothing before a blob has been met)
@@ -676,16 +681,20 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	}
 
 
-## SPELLBROS level (Neven's spec, round 3): the crimson brother overhead
-## burns a killing blob for 1 mana, so the band is LONG GAUNTLET decks
-## littered with blobs at IRREGULAR spacing. Round 2 pinned the blobs to
-## the 0.6*v bounce carry — the exact BLOB BRIDGES chain — and the whole
-## band fell to mindless jump-stomping. Now spacings are drawn from a wide
-## band around the chain window and the patrols drift wide at uneven
-## speeds, so the line is chaos: stomp what happens to line up, let the
-## brother burn what doesn't, and refill the pool from the fragment arcs
-## overhead (some orange +3). Blob-free mega crossings still drain the
-## pool the other way (a built platform).
+## SPELLBROS level (Neven's spec, round 4): "way more blobs, more cramped,
+## more irregular — and more platforming". The whole band is blob country:
+## EVERY deck carries a line of them, and the run strictly ALTERNATES
+## short decks (1.2-1.7*v) with long gauntlet decks (5-10*v), while the
+## gap before a deck is sometimes a MEGA (0.95-1.25*v: one built platform,
+## the pool's other drain) and otherwise a plain jump. The lines are
+## cramped walls with irregular breathers — spacings mostly 0.12-0.26*v,
+## some mid, some wide — so no bounce rhythm survives more than a few
+## crowns: stomp what lines up, let the brother burn what doesn't
+## (1 mana), refill from the fragment arcs overhead (some orange +3) and
+## the stomp bounties themselves. Geometry guarantees: the first blob
+## stays clear of the entry landing, and every deck keeps >= 0.7*v of
+## tail so the bounce off its LAST blob (0.663*v of carry) lands ON deck,
+## never in the next gap. Teach-in: two short mild decks' worth, no megas.
 func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	# wind-down into THE VOID: plain calm hops, nothing left to burn
 	if PHASE_VOID - d <= WIND_DOWN_M:
@@ -709,73 +718,74 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 		}
 	var teach := _is_teach(d)
 	var top_y := clampf(last_top_y + rng.randf_range(-40.0, 40.0), 700.0, 920.0)
-	if not teach and rng.randf() < 0.3:
-		# blob-free crossing: the pool's other drain is a built platform
-		var mgap := rng.randf_range(0.95, 1.25) * v
-		var mw := rng.randf_range(300.0, 400.0)
-		var mx := next_x + mgap
-		_place_chunk(mx, top_y, mw)
-		_place_coin(Vector2(next_x + mgap * 0.5, minf(last_top_y, top_y) - 190.0))
-		var mrise := maxf(0.0, last_top_y - top_y)
-		next_x = mx + mw
-		last_top_y = top_y
-		return {
-			"gap": mgap, "width": mw, "top_y": top_y, "mega": false,
-			"enemies": 0, "entities": 1, "climb": 0,
-			"void": false, "pillar": false, "bros": true, "gkind": "gmega",
-			"blobs": 0, "stars": 0, "rise": mrise, "speed": v,
-		}
-	# gauntlet deck: a LONG platform and the chaotic blob line. Teach-ins
-	# keep it short and mild; the full band packs 3-6 blobs whose spacings
-	# straddle the 0.6*v auto-chain (0.3*v drops you SHORT of the next
-	# crown, 1.0*v strands you on deck between them) — reading the line
-	# beats muscle memory, and what can't be dodged is what the burns are
-	# for. The first blob stays clear of the entry landing (>= 0.6*v past
-	# the takeoff edge) and the tail still catches a last bounce on deck.
-	var k := 2 if teach else 3 + rng.randi() % 4
-	var gap := rng.randf_range(0.40, 0.52) * v
-	var lead := (0.65 if teach else rng.randf_range(0.6, 0.9)) * v - gap
-	var bxs: Array = [lead]
-	for i in range(k - 1):
-		var sp := (rng.randf_range(0.5, 0.8) if teach else rng.randf_range(0.3, 1.0)) * v
-		bxs.append(bxs[i] + sp)
-	var tail := rng.randf_range(0.72, 1.0) * v
-	var w: float = bxs[k - 1] + tail
+	# the gap: a plain jump, or a mega demanding one built platform —
+	# never two megas in a row, none in the teach-in
+	var mega_gap: bool = not teach and not bros_mega_last and rng.randf() < 0.3
+	bros_mega_last = mega_gap
+	var gap := (rng.randf_range(0.95, 1.25) if mega_gap else rng.randf_range(0.36, 0.5)) * v
+	if mega_gap:
+		# the reward for paying the crossing toll hangs over the emptiness
+		_place_coin(Vector2(next_x + gap * 0.5, top_y - 190.0))
+	# the deck: strict short/long alternation
+	bros_long = not bros_long and not teach
+	var w: float
+	if teach:
+		w = rng.randf_range(2.0, 2.6) * v
+	elif bros_long:
+		w = rng.randf_range(5.0, 10.0) * v
+	else:
+		w = rng.randf_range(1.2, 1.7) * v
+	var lead := minf(rng.randf_range(0.5, 0.7) * v, w - 0.7 * v)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
+	# the blob line: fill the deck, keeping the landable tail free
+	var bxs: Array = [lead]
+	while true:
+		var sp: float
+		if teach:
+			sp = rng.randf_range(0.5, 0.8) * v
+		else:
+			var r := rng.randf()
+			if r < 0.6:
+				sp = rng.randf_range(0.12, 0.26) * v  # the cramped wall
+			elif r < 0.85:
+				sp = rng.randf_range(0.28, 0.45) * v
+			else:
+				sp = rng.randf_range(0.5, 0.8) * v  # a breather
+		if bxs[bxs.size() - 1] + sp > w - 0.7 * v:
+			break
+		bxs.append(bxs[bxs.size() - 1] + sp)
+	var k := bxs.size()
 	var espeed := enemy_speed_for(d)
-	var smin := 9.0 * v
+	var smin := 0.0
 	var smax := 0.0
 	for i in range(k):
 		var bx: float = x + bxs[i]
-		# patrols drift as wide as the local elbow room allows (never into a
-		# neighbor's lane or off the deck) at uneven speeds: the same deck
-		# never plays twice
-		var room_l: float = bxs[i] if i == 0 else bxs[i] - bxs[i - 1]
-		var room_r: float = (w - bxs[i]) if i == k - 1 else bxs[i + 1] - bxs[i]
-		var r := clampf(minf(room_l, room_r) * 0.4, 40.0, 140.0)
-		var b := SpikeBlob.new(bx - r, bx + r)
+		var b := SpikeBlob.new(bx - 40.0, bx + 40.0)
 		b.position = Vector2(bx, top_y - 30.0)
-		b.speed = espeed * rng.randf_range(0.8, 1.25)
+		b.speed = espeed
 		add_child(b)
 		if i > 0:
-			smin = minf(smin, bxs[i] - bxs[i - 1])
-			smax = maxf(smax, bxs[i] - bxs[i - 1])
+			var sp: float = bxs[i] - bxs[i - 1]
+			smin = sp if smin == 0.0 else minf(smin, sp)
+			smax = maxf(smax, sp)
 	var coins := 0
 	for i in range(k - 1):
-		if rng.randf() < 0.65:
+		if rng.randf() < 0.35:
 			var amt := 3 if rng.randf() < 0.18 else 1
 			_place_coin(Vector2(x + (bxs[i] + bxs[i + 1]) * 0.5, top_y - 200.0), amt)
 			coins += 1
+	var pu := _maybe_powerup(x, w, top_y, 0.05)
 	var rise := maxf(0.0, last_top_y - top_y)
 	next_x = x + w
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": false,
-		"enemies": k, "entities": k + coins, "climb": 0,
-		"void": false, "pillar": false, "bros": true, "gkind": "gaunt",
-		"blobs": k, "b1": gap + lead, "smin": smin, "smax": smax,
-		"tail": tail, "stars": 0, "rise": rise, "speed": v,
+		"enemies": k, "entities": k + coins + pu + (1 if mega_gap else 0),
+		"climb": 0, "void": false, "pillar": false, "bros": true,
+		"gkind": "gaunt", "mgap": mega_gap, "long": bros_long, "blobs": k,
+		"lead": lead, "smin": smin, "smax": smax, "tail": w - bxs[k - 1],
+		"stars": pu, "rise": rise, "speed": v,
 	}
 
 

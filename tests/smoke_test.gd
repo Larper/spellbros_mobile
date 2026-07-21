@@ -850,17 +850,21 @@ func _run_tests() -> void:
 	# EVERY deck opens with its left-edge beacon — a deck whose only light
 	# sat mid-deck read as a missing edge (Neven)
 	_check(umbrab["beacon"] == 80, "umbra decks always open with a beacon")
-	# SPELLBROS: gauntlet decks dominate, mega crossings mix in, and the
-	# blob line is CHAOS by construction — across the sample the spacings
-	# must straddle both sides of the 0.6*v auto-chain window, never
-	# collapse onto it (that's how the band got stomp-cheesed)
+	# SPELLBROS: every chunk is a blob deck, short and long strictly
+	# alternating, mega gaps mixed in, and the lines are cramped walls
+	# with irregular breathers — never a survivable bounce rhythm
 	var brosb := _probe(Levels.start_m(Levels.BROS) + 50.0, 80)
-	_check(brosb["gaunt"] > 40 and brosb["gmega"] > 5, "spellbros band mix")
-	_check(brosb["enemies"] > 180, "spellbros gauntlets run thick with blobs")
-	_check(brosb["sp_lo"] < 0.45 and brosb["sp_hi"] > 0.8, "spellbros spacing is chaotic")
+	_check(brosb["gaunt"] == 80 and brosb["bmega"] > 5 and brosb["bmega"] < 40,
+			"spellbros: all blob decks, megas mixed in")
+	_check(brosb["blong"] > 20 and brosb["bshort"] > 20,
+			"spellbros alternates short and long decks")
+	_check(brosb["enemies"] > 600, "spellbros swarms with blobs")
+	_check(brosb["sp_lo"] < 0.28 and brosb["sp_hi"] > 0.5,
+			"spellbros spacing cramped and chaotic")
 	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
-	_check(teach_bros["gaunt"] == 80 and teach_bros["enemies"] == 160,
-			"spellbros teach-in: short gauntlets")
+	_check(teach_bros["gaunt"] == 80 and teach_bros["bmega"] == 0
+			and teach_bros["enemies"] >= 160 and teach_bros["enemies"] <= 240,
+			"spellbros teach-in: short mild decks, no megas")
 	var bros_out := _probe(TerrainSpawner.PHASE_VOID - 20.0, 80)
 	_check(bros_out["enemies"] == 0 and bros_out["mega"] == 0, "spellbros wind-down calm")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
@@ -905,6 +909,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
 	main.spawner.spring_deck_left = 3
+	main.spawner.bros_long = false
+	main.spawner.bros_mega_last = false
 	main.spawner.enemy_seen = true  # probes sample mid-run behavior
 	main.spawner.shield_given = true  # showcase done; steady-state sampling
 	main.spawner.star_given = true
@@ -914,7 +920,8 @@ func _probe(d: float, n: int) -> Dictionary:
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "dfloor": 0, "dceil": 0,
-			"spring": 0, "svoid": 0, "gaunt": 0, "gmega": 0,
+			"spring": 0, "svoid": 0, "gaunt": 0,
+			"blong": 0, "bshort": 0, "bmega": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
@@ -959,8 +966,6 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["arc"] += 1
 		if s.get("gkind", "") == "gaunt":
 			stats["gaunt"] += 1
-		elif s.get("gkind", "") == "gmega":
-			stats["gmega"] += 1
 		stats["min_top"] = minf(stats["min_top"], s["top_y"])
 		stats["max_top"] = maxf(stats["max_top"], s["top_y"])
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
@@ -972,26 +977,35 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["void"]:
 			stats["builds"] += ceilf(s["gap"] / one_build)
 		elif s.get("bros", false):
-			if s.get("gkind", "") == "gmega":
-				# blob-free crossing: the build IS the crossing
-				stats["builds"] += 1.0
-				if s["gap"] > one_build:
-					stats["bad"] += 1
-			elif s["gap"] > 0.68 * v:
-				stats["bad"] += 1  # gauntlet entries / wind-down: plain jumps
 			if s.get("gkind", "") == "gaunt":
-				# irregular gauntlet: the first blob stays clear of the entry
-				# landing, spacings live inside the chaos band (NOT pinned to
-				# the 0.6*v auto-chain — that cheesed the whole level), and
-				# the tail still catches a last bounce on deck
-				if s["b1"] < 0.58 * v or s["b1"] > 0.92 * v:
+				if s.get("mgap", false):
+					# a mega gap IS the build; one platform must bridge it
+					stats["builds"] += 1.0
+					if s["gap"] > one_build:
+						stats["bad"] += 1
+				elif s["gap"] > 0.68 * v:
+					stats["bad"] += 1  # plain entry gaps stay jumpable
+				# the blob line: first blob clear of the entry landing, the
+				# cramped wall inside its bounds, and enough tail that the
+				# bounce off the LAST blob (0.663*v of carry) lands ON the
+				# deck, never in the next gap
+				if s["lead"] < 0.42 * v or s["lead"] > 0.75 * v:
 					stats["bad"] += 1
-				if s["smin"] < 0.28 * v or s["smax"] > 1.02 * v:
+				if s["tail"] < 0.66 * v:
 					stats["bad"] += 1
-				if s["tail"] < 0.71 * v or s["tail"] > 1.02 * v:
-					stats["bad"] += 1
-				stats["sp_lo"] = minf(stats["sp_lo"], s["smin"] / v)
-				stats["sp_hi"] = maxf(stats["sp_hi"], s["smax"] / v)
+				if s["blobs"] > 1:
+					if s["smin"] < 0.1 * v or s["smax"] > 0.85 * v:
+						stats["bad"] += 1
+					stats["sp_lo"] = minf(stats["sp_lo"], s["smin"] / v)
+					stats["sp_hi"] = maxf(stats["sp_hi"], s["smax"] / v)
+				if s.get("long", false):
+					stats["blong"] += 1
+				else:
+					stats["bshort"] += 1
+				if s.get("mgap", false):
+					stats["bmega"] += 1
+			elif s["gap"] > 0.68 * v:
+				stats["bad"] += 1  # wind-down: plain jumps
 		elif s.get("bridge", false):
 			if s.get("bkind", "blob") == "out":
 				# blob-free wind-down: a plain jump must clear it
