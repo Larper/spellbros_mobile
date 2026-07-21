@@ -595,10 +595,14 @@ func _spawn_flip_outro(v: float) -> Dictionary:
 ##     edge and the stomp lands (the ±95 px aim assist covers the rest);
 ##   - a PASSIVE double's second blob sits 0.6*v after the first (one
 ##     no-tap bounce, 0.606 s of hang) — the flow Neven liked;
-##   - an ACTIVE double's second blob sits 1.08*v out: the passive bounce
-##     falls 0.48*v SHORT into the gap, so the stomp-refresh jump must be
-##     spent near the bounce apex (tap ~0.3 s after the stomp; carries
-##     1.07-1.12*v for taps within ±0.05 s, the aim assist eats the rest);
+##   - an ACTIVE double's second blob sits 1.2*v out: the passive bounce
+##     falls 0.6*v SHORT into the gap, so the stomp-refresh jump must be
+##     spent off the bounce. Real taps land a beat AFTER the apex, and
+##     later taps carry farther: taps 0.30-0.45 s after the stomp fall
+##     through crown height 1.12-1.25*v out. Round 4 placed the blob at
+##     1.08*v — the at-apex figure — and Neven sailed clean over it. At
+##     1.2*v the natural late tap lands square and the perfect apex tap
+##     comes up 68 px short, inside the ±95 px aim assist;
 ##   - the bounce off the LAST blob falls back to deck level in 0.71 s, so
 ##     the far edge sits 0.50-0.56*v past it: the chain always lands INSIDE
 ##     the next deck.
@@ -637,7 +641,7 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 		var kind := rng.randf()
 		if kind < 0.35:
 			active = true
-			blob_xs.append(0.5 * v + 1.08 * v)
+			blob_xs.append(0.5 * v + 1.2 * v)
 		elif kind < 0.65:
 			blob_xs.append(0.5 * v + 0.6 * v)
 	# the far edge lands the passive bounce mid-deck; doubles trim the top
