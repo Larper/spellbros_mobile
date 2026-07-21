@@ -31,13 +31,7 @@ func _process(delta: float) -> void:
 	var beat := 60.0 / GameAudio.BPM
 	var pulse := exp(-5.0 * fmod(t, beat) / beat)
 	var hue := fmod(t * 0.02, 1.0)
-	# UMBRA never hard-cuts (Neven): the psychedelia drains to black across
-	# the FLIPSIDE wind-down — starting right as the UMBRA banner fires —
-	# and blooms back out over SPELLBROS' first meters.
-	var d: float = main.distance_m
-	var dark := clampf((d - (Levels.start_m(Levels.UMBRA) - 60.0)) / 55.0, 0.0, 1.0) \
-			- clampf((d - Levels.start_m(Levels.BROS)) / 30.0, 0.0, 1.0)
-	dark = clampf(dark, 0.0, 1.0)
+	var dark := darkness()
 	# lights-out target: PITCH black (Neven: UMBRA played like a faster
 	# FOUNDATIONS — now unlit stretches are truly invisible, and sight
 	# itself is the resource: crystals beacon, built platforms are the
@@ -48,6 +42,19 @@ func _process(delta: float) -> void:
 	color = lite.lerp(Color(v, v, v * 1.25), dark)
 	RenderingServer.set_default_clear_color(
 			lite_bg.lerp(Color(0.004, 0.003, 0.01), dark))
+
+
+## 0 = full psychedelia, 1 = UMBRA pitch black. Never a hard cut (Neven):
+## drains to black across the FLIPSIDE wind-down — starting as the UMBRA
+## banner fires — and blooms back out across UMBRA's own calm wind-down,
+## reaching full light exactly at the SPELLBROS boundary. Monotonic on both
+## slopes: the world must never dip darker before brightening (it did: the
+## old ramp-out started AT the boundary, after the halo had already cut).
+## Main drives the wizard's halo from this same gradient.
+func darkness() -> float:
+	var d: float = main.distance_m
+	return clampf(clampf((d - (Levels.start_m(Levels.UMBRA) - 60.0)) / 55.0, 0.0, 1.0)
+			- clampf((d - (Levels.start_m(Levels.BROS) - 45.0)) / 45.0, 0.0, 1.0), 0.0, 1.0)
 
 
 ## Warm point light used by the wizard, crystals and lantern-platforms in

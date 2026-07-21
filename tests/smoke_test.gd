@@ -552,6 +552,38 @@ func _run_tests() -> void:
 	p.jump_buffer = 0.0
 	p.velocity = Vector2.ZERO
 
+	# the halo rides the same gradient: already radiating on the approach,
+	# full in the dark, dimming with the exit — never popping at a boundary
+	main.distance_m = Levels.start_m(Levels.UMBRA) - 20.0
+	await create_timer(0.05).timeout
+	var halo_in: bool = main.wizard_light.enabled \
+			and main.wizard_light.energy > 0.3 and main.wizard_light.energy < 1.19
+	main.distance_m = Levels.start_m(Levels.UMBRA) + 100.0
+	await create_timer(0.05).timeout
+	var halo_full: bool = main.wizard_light.energy > 1.19
+	# the exit must brighten MONOTONICALLY across UMBRA's wind-down into
+	# SPELLBROS — the old ramp started at the boundary, after the halo had
+	# already cut, so the world dipped darker before blooming (Neven)
+	main.distance_m = Levels.start_m(Levels.BROS) - 40.0
+	main.psy._process(0.016)
+	var out_dim: float = main.psy.color.v
+	await create_timer(0.05).timeout
+	var halo_out: bool = main.wizard_light.enabled and main.wizard_light.energy < 1.19
+	main.distance_m = Levels.start_m(Levels.BROS) - 5.0
+	main.psy._process(0.016)
+	var out_mid: float = main.psy.color.v
+	main.distance_m = Levels.start_m(Levels.BROS) + 20.0
+	main.psy._process(0.016)
+	var out_lit: float = main.psy.color.v
+	await create_timer(0.05).timeout
+	var halo_off: bool = not main.wizard_light.enabled
+	print("TEST umbralight: halo in=%s full=%s out=%s off=%s | v %.2f < %.2f < %.2f (expect brightening)" % [
+		halo_in, halo_full, halo_out, halo_off, out_dim, out_mid, out_lit])
+	_check(halo_in and halo_full and halo_out and halo_off,
+			"halo rides the darkness gradient")
+	_check(out_dim < out_mid and out_mid < out_lit, "umbra exit brightens monotonically")
+	main.distance_m = 20.0
+
 	# opening runway: taps still JUMP right after the boundary — the first
 	# flip is only asked for once the runway ends
 	main.distance_m = Levels.start_m(Levels.FLIPSIDE) + 10.0

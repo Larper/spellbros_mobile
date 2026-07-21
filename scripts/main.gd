@@ -190,8 +190,14 @@ func _physics_process(delta: float) -> void:
 			hud.show_level_banner("LEVEL %d: %s" % [announced_level + 1,
 					Levels.level_name(announced_level)])
 			audio.play("pickup")
-		# per-level state: darkness light, the echo brother, gravity hygiene
-		wizard_light.enabled = lv == Levels.UMBRA
+		# per-level state: darkness light, the echo brother, gravity hygiene.
+		# The halo rides the SAME gradient as the darkness itself: the wizard
+		# starts radiating during the FLIPSIDE wind-down and dims out across
+		# UMBRA's exit — it must never pop on/off at a boundary while the
+		# world is still black (Neven saw exactly that dip entering SPELLBROS)
+		var dark: float = psy.darkness()
+		wizard_light.enabled = dark > 0.01
+		wizard_light.energy = 1.2 * dark
 		bro.active = lv == Levels.BROS
 		var flip_zone := in_flip_zone()
 		if not flip_zone and player.gravity_dir < 0.0:
