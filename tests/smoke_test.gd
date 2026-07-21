@@ -140,6 +140,21 @@ func _run_tests() -> void:
 	print("TEST camstatic: y=%.0f (expect %.0f, never moving)" % [
 		main.cam.global_position.y, main.CAMERA_Y])
 	_check(main.cam.global_position.y == main.CAMERA_Y, "camera static across jumps")
+	# ...with ONE allowance: a stair top ahead lifts the frame (and only
+	# terrain does — the target reads chunks, never the wizard's motion)
+	var t_base: float = main.camera_target_y()
+	p.velocity.y = 2500.0
+	var t_falling: float = main.camera_target_y()
+	p.velocity.y = 0.0
+	var stair := GroundChunk.new(300.0)
+	stair.position = Vector2(p.global_position.x + 300.0, 260.0)
+	main.spawner.add_child(stair)
+	var t_stair: float = main.camera_target_y()
+	stair.queue_free()
+	print("TEST camstair: base %.0f falling %.0f stair %.0f (expect %.0f, %.0f, >= 200 px higher)" % [
+		t_base, t_falling, t_stair, main.CAMERA_Y, main.CAMERA_Y])
+	_check(t_base == main.CAMERA_Y and t_falling == t_base, "frame ignores the wizard")
+	_check(t_base - t_stair >= 200.0, "stair ahead lifts the frame")
 
 	# no-mana path must refuse to build
 	main.coins = 0
@@ -490,12 +505,14 @@ func _run_tests() -> void:
 	_check(runway_jumps, "flipside runway taps jump")
 	p.jump_buffer = 0.0
 
-	# static frame re-check: the FLIPSIDE tests above flipped gravity both
-	# ways across real physics frames — the camera's y must not have
-	# followed (the old per-gravity retargeting is what jittered — Neven)
-	print("TEST camflip: y=%.0f (expect %.0f after flips)" % [
-		main.cam.global_position.y, main.CAMERA_Y])
-	_check(main.cam.global_position.y == main.CAMERA_Y, "camera static across flips")
+	# FLIPSIDE pins the frame outright: no stair lift, no motion — the
+	# per-gravity retargeting is what jittered on every flip (Neven)
+	main.distance_m = 950.0
+	var t_flip_zone: float = main.camera_target_y()
+	main.distance_m = 20.0
+	print("TEST camflip: target %.0f (expect %.0f, pinned in the corridor)" % [
+		t_flip_zone, main.CAMERA_Y])
+	_check(t_flip_zone == main.CAMERA_Y, "flipside frame pinned")
 
 	# UMBRA: the world darkens, builds become lanterns, crystals beacon
 	main.distance_m = 1300.0

@@ -36,7 +36,14 @@ const CAMERA_LEAD := 430.0  # world px ahead of the wizard the camera centers on
 ## every FLIPSIDE flip — Neven). At this zoom the frame spans y 188..1052,
 ## which holds the whole playfield at once: the deepest deck top (970) with
 ## ground below it, and the FLIPSIDE ceiling faces (240..380) overhead.
+## ONE allowance (Neven): stair set-pieces may drift the frame UP. When a
+## chunk top ahead rises past CAM_LIFT_TRIGGER the frame eases up just far
+## enough to keep the stair tops (and the jumps off them) in view, then
+## settles back to CAMERA_Y. Chunk tops are static world data, so the frame
+## still never follows a jump or a fall; FLIPSIDE stays pinned.
 const CAMERA_Y := 620.0
+const CAM_LIFT_TRIGGER := 560.0
+const CAM_LIFT_MAX := 300.0
 const CAMERA_CHASE := 0.85  # fraction of run speed the camera keeps while the player is stalled
 ## The stall-crush never advances faster than base-speed pressure (0.85*470):
 ## at capped run speed the chase would otherwise eat the reaction window
@@ -205,14 +212,37 @@ func _physics_process(delta: float) -> void:
 		var half_w := get_viewport().get_visible_rect().size.x * 0.5 / CAMERA_ZOOM
 		if player.global_position.x < cam.global_position.x - half_w - 30.0:
 			player.die()
-	# cam.y stays CAMERA_Y forever: the frame is the level, the wizard moves
-	# inside it, and the bottom of the world is always in view
+	cam.global_position.y = lerpf(cam.global_position.y, camera_target_y(),
+			1.0 - pow(0.002, delta))
 
 	if shake > 0.0:
 		shake = maxf(0.0, shake - delta * 30.0)
 		cam.offset = Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
 	else:
 		cam.offset = Vector2.ZERO
+
+
+## CAMERA_Y always — except the staircase allowance (see the constants).
+## Reads only terrain, never the wizard: jumps and falls cannot move it.
+func camera_target_y() -> float:
+	if in_flip_zone():
+		return CAMERA_Y
+	return CAMERA_Y - clampf((CAM_LIFT_TRIGGER - _highest_ground_ahead()) * 0.9,
+			0.0, CAM_LIFT_MAX)
+
+
+func _highest_ground_ahead() -> float:
+	# Top y of the HIGHEST floor chunk overlapping [player.x, player.x + 700]
+	# (the lift sees stairs coming before the wizard climbs them); 9999 if none.
+	var px := player.global_position.x
+	var highest := 9999.0
+	for c in spawner.get_children():
+		var g := c as GroundChunk
+		if g == null or g.ceiling:
+			continue
+		if g.position.x <= px + 700.0 and g.position.x + g.width >= px:
+			highest = minf(highest, g.position.y)
+	return highest
 
 
 func banner_lead_for(lv: int) -> float:
