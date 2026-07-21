@@ -193,13 +193,35 @@ func _run_tests() -> void:
 	p.global_position.x = main.cam.global_position.x - 600.0  # screen x ~210
 	main.coins = 1
 	main.build_cooldown = 0.0
-	main._handle_tap(Vector2(300.0, 500.0))
+	# tap at the wizard's own height: this probes the horizontal divider
+	# floor, not the below-the-wizard build rule
+	var crush_wiz_y: float = (main.get_canvas_transform() * p.global_position).y
+	main._handle_tap(Vector2(300.0, crush_wiz_y))
 	var floor_jumps: bool = p.jump_buffer > 0.0 and main.coins == 1
 	p.global_position.x = x_keep
 	p.jump_buffer = 0.0
 	main.coins = 0
 	print("TEST jumpzone: crushed-left tap jumps=%s (expect true, no build)" % floor_jumps)
 	_check(floor_jumps, "jump zone floor")
+
+	# last-second save: a tap clearly BELOW the wizard builds even inside
+	# the jump zone (dropping a pad under yourself mid-fall must never read
+	# as a jump — Neven), while a low tap far off to the left still jumps
+	main.coins = 1
+	main.build_cooldown = 0.0
+	p.jump_buffer = 0.0
+	var wiz_s: Vector2 = main.get_canvas_transform() * p.global_position
+	main._handle_tap(wiz_s + Vector2(-120.0, 250.0))
+	var below_builds: bool = main.coins == 0 and p.jump_buffer <= 0.0
+	main.coins = 1
+	main.build_cooldown = 0.0
+	main._handle_tap(wiz_s + Vector2(-450.0, 250.0))
+	var low_left_jumps: bool = p.jump_buffer > 0.0 and main.coins == 1
+	main.coins = 0
+	p.jump_buffer = 0.0
+	print("TEST buildbelow: below_builds=%s far_left_jumps=%s (expect true true)" % [
+		below_builds, low_left_jumps])
+	_check(below_builds and low_left_jumps, "build below the wizard")
 
 	# stomp bounty: squishing a blob pays +1 mana and bounces the player
 	main.coins = 2

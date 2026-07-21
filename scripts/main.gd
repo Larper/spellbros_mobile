@@ -297,13 +297,23 @@ func _handle_tap(screen_pos: Vector2) -> void:
 	# when the crush-camera pushes him toward the left edge (stalled while
 	# stair-building), the jump zone must not shrink away right when jumps
 	# matter most.
+	var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos
+	# LAST-SECOND SAVE (Neven): a tap clearly below the wizard's feet — in
+	# his FALL direction, so it mirrors on the FLIPSIDE ceiling — and not
+	# far behind him is a BUILD even inside the jump zone: dropping a pad
+	# under yourself mid-fall must never read as a jump. Jump taps live at
+	# or above wizard height, or well off to the left; both keep working.
+	var below: float = (world_pos.y - player.global_position.y) * player.gravity_dir
+	if below > 110.0 and world_pos.x > player.global_position.x - 240.0:
+		world_pos.x -= BUILD_TOUCH_NUDGE
+		_try_build(world_pos)
+		return
 	var player_screen_x: float = (get_canvas_transform() * player.global_position).x
 	var divider_x: float = maxf(player_screen_x,
 			get_viewport().get_visible_rect().size.x * 0.5 - CAMERA_LEAD * CAMERA_ZOOM)
 	if screen_pos.x < divider_x:
 		_jump_pressed()
 	else:
-		var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos
 		world_pos.x -= BUILD_TOUCH_NUDGE
 		_try_build(world_pos)
 
