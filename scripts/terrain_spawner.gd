@@ -693,22 +693,24 @@ func _spawn_bridge_chunk(d: float, v: float, budget: int) -> Dictionary:
 	}
 
 
-## SPELLBROS level (Neven's spec, round 5): UMBRA's structure, populated
-## with blobs. The band runs the standard generator's SKELETON — plain
-## gaps under the same rise rule, mega gaps (one built platform), climb
-## staircases up and down — but every deck is blob country: cramped
-## irregular lines (spacings mostly 0.12-0.26*v, some mid, some wide) so
-## no bounce rhythm survives more than a few crowns. LONG decks (~35%,
-## 5-9*v) carry the thickest walls, kept interesting by MID-AIR
-## PLATFORMS: thin one-way slabs ~175 px over the deck — hop up for a
-## blob-free stretch (some carry a fragment or a powerup), drop back
-## into the wall where they end. Stomp what lines up, let the brother
-## burn what doesn't (1 mana), refill from the fragment arcs overhead
-## (some orange +3) and the stomp bounties. Geometry guarantees: the
-## first blob stays clear of the entry landing, and every deck keeps
-## >= 0.7*v of tail so the bounce off its LAST blob (0.663*v of carry)
-## lands ON deck, never in the next gap. Teach-in: short mild decks —
-## no megas, no stairs, no floaters.
+## SPELLBROS level (Neven's spec, round 6): UMBRA's structure, SATURATED
+## with blobs. The band must read as IMPOSSIBLE on first sight — "WTF" —
+## until the player realizes the brother is burning the wall away for
+## mana instead of letting them die. The skeleton is still the standard
+## generator's — plain gaps under the rise rule, mega gaps (one built
+## platform), climb staircases up and down — but now EVERYTHING is blob
+## country: the staircases carry squatters on their steps (round 5 left
+## them bare — Neven), every deck runs a cramped irregular wall
+## (spacings mostly 0.12-0.22*v), and LONG decks (~40%, 5-9*v) stack a
+## second storey of DENSE mid-air one-way platforms — most of them
+## blob-ridden too, some carrying a fragment or the band's powerup spot.
+## Stomp what lines up, let the brother burn what doesn't (1 mana each),
+## refill from the thick fragment arcs (some orange +3) and the stomp
+## bounties. Geometry guarantees: the first deck blob stays clear of the
+## entry landing, and every deck keeps >= 0.7*v of tail so the bounce
+## off its LAST blob (0.663*v of carry) lands ON deck, never in the
+## next gap. Teach-in: short mild decks — no megas, no stairs, no
+## floaters (the wall of the full band hits right after the banner).
 func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	# wind-down into THE VOID: plain calm hops, nothing left to burn
 	if PHASE_VOID - d <= WIND_DOWN_M:
@@ -749,18 +751,28 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 		var s_y := clampf(last_top_y + sdy, SKY_Y_MIN, BASE_Y_MAX)
 		var sx := next_x + sgap
 		_place_chunk(sx, s_y, sw)
-		var s_used := 0
+		# the stairs are blob country too (round 5 left them bare — Neven):
+		# most steps carry a patrolling squatter right where the build
+		# lands — stomp it on arrival or pay the brother a fragment
+		var sblobs := 0
+		if rng.randf() < 0.75:
+			sblobs = 1
+			var sb := SpikeBlob.new(sx + 60.0, sx + sw - 60.0)
+			sb.position = Vector2(sx + rng.randf_range(90.0, sw - 90.0), s_y - 30.0)
+			sb.speed = enemy_speed_for(d)
+			add_child(sb)
+		var s_used := sblobs
 		if rng.randf() < MANA_CHANCE_CLIMB:
 			_place_coin(Vector2(sx + rng.randf_range(80.0, sw - 80.0), s_y - 60.0))
-			s_used = 1
+			s_used += 1
 		var s_rise := maxf(0.0, last_top_y - s_y)
 		next_x = sx + sw
 		last_top_y = s_y
 		return {
 			"gap": sgap, "width": sw, "top_y": s_y, "mega": false,
-			"enemies": 0, "entities": s_used, "climb": climb_dir,
+			"enemies": sblobs, "entities": s_used, "climb": climb_dir,
 			"void": false, "pillar": false, "bros": true, "gkind": "gaunt",
-			"blobs": 0, "pads": 0, "stars": 0, "rise": s_rise, "speed": v,
+			"blobs": sblobs, "pads": 0, "stars": 0, "rise": s_rise, "speed": v,
 		}
 	# the gap: standard-rule plain jump, or a mega demanding one built
 	# platform — never two megas in a row, none in the teach-in
@@ -781,8 +793,8 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	if mega_gap:
 		# the reward for paying the crossing toll hangs over the emptiness
 		_place_coin(Vector2(next_x + gap * 0.5, minf(last_top_y, top_y) - 190.0))
-	# the deck: mostly short pillars, ~35% long gauntlets
-	var long_deck: bool = not teach and rng.randf() < 0.35
+	# the deck: short pillars or long gauntlets, ~40% long
+	var long_deck: bool = not teach and rng.randf() < 0.4
 	var w: float
 	if teach:
 		w = rng.randf_range(2.0, 2.6) * v
@@ -793,31 +805,40 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	var lead := minf(rng.randf_range(0.5, 0.7) * v, w - 0.7 * v)
 	var x := next_x + gap
 	_place_chunk(x, top_y, w)
-	# mid-air platforms over long decks: hop-up-able (rise <= 185 < 207 max
-	# jump), one-way, staggered with real deck stretches between them
+	var espeed := enemy_speed_for(d)
+	# the second storey over long decks: DENSE mid-air one-way platforms
+	# (hop-up-able: rise <= 185 < 207 max jump), most carrying their own
+	# squatter — the high road is blob country too, not a refuge (round 5
+	# left them empty and sparse — Neven: BORING). Blob-free pads pay a
+	# fragment or the band's one easy-to-take powerup spot instead.
 	var pads := 0
+	var pblobs := 0
 	var pad_rise := 0.0
 	var pad_spans: Array = []
 	var pu := 0
 	var coins := 0
 	if long_deck:
-		var px := rng.randf_range(0.8, 1.2) * v
-		while px + 0.6 * v < w - 0.5 * v:
+		var px := rng.randf_range(0.5, 0.9) * v
+		while px + 0.5 * v < w - 0.5 * v:
 			var pw := rng.randf_range(0.42, 0.6) * v
-			var pr := rng.randf_range(160.0, 185.0)
+			var pr := rng.randf_range(150.0, 185.0)
 			_place_float(x + px, top_y - pr, pw)
 			pad_spans.append([px, px + pw])
 			pad_rise = maxf(pad_rise, pr)
 			pads += 1
-			# the high road pays: a fragment — or occasionally a powerup,
-			# the band's only easy-to-take spot for one (blob-free by
-			# construction, walked into mid-run: Neven's standing rule)
-			if pu == 0 and rng.randf() < 0.12:
+			var squat := rng.randf() < 0.7
+			if squat:
+				pblobs += 1
+				var pb := SpikeBlob.new(x + px + 50.0, x + px + pw - 50.0)
+				pb.position = Vector2(x + px + pw * 0.5, top_y - pr - 30.0)
+				pb.speed = espeed
+				add_child(pb)
+			elif pu == 0 and rng.randf() < 0.2:
 				pu = _maybe_powerup(x + px, pw, top_y - pr, 1.0)
-			elif rng.randf() < 0.5:
+			else:
 				_place_coin(Vector2(x + px + pw * 0.5, top_y - pr - 60.0))
 				coins += 1
-			px += pw + rng.randf_range(1.2, 1.8) * v
+			px += pw + rng.randf_range(0.35, 0.7) * v
 	# the blob line: fill the deck, keeping the landable tail free
 	var bxs: Array = [lead]
 	while true:
@@ -826,17 +847,16 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 			sp = rng.randf_range(0.5, 0.8) * v
 		else:
 			var r := rng.randf()
-			if r < 0.65:
-				sp = rng.randf_range(0.12, 0.26) * v  # the cramped wall
-			elif r < 0.87:
-				sp = rng.randf_range(0.28, 0.45) * v
+			if r < 0.75:
+				sp = rng.randf_range(0.12, 0.22) * v  # the cramped wall
+			elif r < 0.92:
+				sp = rng.randf_range(0.25, 0.42) * v
 			else:
-				sp = rng.randf_range(0.5, 0.8) * v  # a breather
+				sp = rng.randf_range(0.5, 0.7) * v  # a rare breather
 		if bxs[bxs.size() - 1] + sp > w - 0.7 * v:
 			break
 		bxs.append(bxs[bxs.size() - 1] + sp)
 	var k := bxs.size()
-	var espeed := enemy_speed_for(d)
 	var smin := 0.0
 	var smax := 0.0
 	for i in range(k):
@@ -850,7 +870,8 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 			smin = sp if smin == 0.0 else minf(smin, sp)
 			smax = maxf(smax, sp)
 	for i in range(k - 1):
-		if rng.randf() < 0.35:
+		# thick arcs: burning through the wall costs, so the wall pays
+		if rng.randf() < 0.45:
 			var cx: float = (bxs[i] + bxs[i + 1]) * 0.5
 			# never under a floater: a fragment at deck-200 inside a pad's
 			# span visually collides with the slab hanging at deck~175
@@ -861,7 +882,7 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 					break
 			if covered:
 				continue
-			var amt := 3 if rng.randf() < 0.18 else 1
+			var amt := 3 if rng.randf() < 0.22 else 1
 			_place_coin(Vector2(x + cx, top_y - 200.0), amt)
 			coins += 1
 	var rise := maxf(0.0, last_top_y - top_y)
@@ -869,10 +890,11 @@ func _spawn_bros_chunk(d: float, v: float) -> Dictionary:
 	last_top_y = top_y
 	return {
 		"gap": gap, "width": w, "top_y": top_y, "mega": mega_gap,
-		"enemies": k, "entities": k + coins + pu + (1 if mega_gap else 0),
+		"enemies": k + pblobs,
+		"entities": k + pblobs + coins + pu + (1 if mega_gap else 0),
 		"climb": 0, "void": false, "pillar": false, "bros": true,
 		"gkind": "gaunt", "mgap": mega_gap, "long": long_deck, "blobs": k,
-		"pads": pads, "pad_rise": pad_rise,
+		"pads": pads, "pblobs": pblobs, "pad_rise": pad_rise,
 		"lead": lead, "smin": smin, "smax": smax, "tail": w - bxs[k - 1],
 		"stars": pu, "rise": rise, "speed": v,
 	}

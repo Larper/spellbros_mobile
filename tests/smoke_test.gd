@@ -857,21 +857,29 @@ func _run_tests() -> void:
 	# sat mid-deck read as a missing edge (Neven)
 	_check(umbrab["beacon"] == 80, "umbra decks always open with a beacon")
 	# SPELLBROS: UMBRA's skeleton — staircases, megas, plain gaps — but
-	# every deck is a cramped blob wall, and long decks carry mid-air
-	# one-way refuges so they never flatten into one boring stomp line
+	# SATURATED with blobs: squatters on the stair steps, cramped walls
+	# on every deck, and a dense blob-ridden second storey of one-way
+	# platforms over the long gauntlets. It must read as impossible until
+	# the brother's burns click.
 	var brosb := _probe(Levels.start_m(Levels.BROS) + 50.0, 80)
 	_check(brosb["gaunt"] == 80 and brosb["bmega"] > 3 and brosb["bmega"] < 30,
 			"spellbros: blob decks with megas mixed in")
 	_check(brosb["climbs"] > 5, "spellbros staircases live (umbra structure)")
-	_check(brosb["blong"] > 4 and brosb["bshort"] > 15,
+	_check(brosb["sblob"] > 10, "spellbros staircases carry squatter blobs")
+	_check(brosb["blong"] > 4 and brosb["bshort"] > 10,
 			"spellbros mixes short pillars and long gauntlets")
-	_check(brosb["pads"] > 8, "spellbros long decks carry mid-air refuges")
-	_check(brosb["enemies"] > 250, "spellbros swarms with blobs")
+	_check(brosb["pads"] > 20, "spellbros second storey is dense")
+	_check(brosb["pblob"] > 12, "spellbros second storey carries blobs")
+	# regression floor, not the tune: typical samples run ~600 blobs per 80
+	# chunks, but climb-heavy / long-poor samples legitimately dip
+	_check(brosb["enemies"] > 300, "spellbros reads as impossible")
 	_check(brosb["sp_lo"] < 0.28 and brosb["sp_hi"] > 0.5,
 			"spellbros spacing cramped and chaotic")
+	# teach decks roll 1-3 blobs each (the wide-spacing fill can break on
+	# its first roll), so 80 chunks legitimately span ~130-230
 	var teach_bros := _probe(Levels.start_m(Levels.BROS) + 10.0, 80)
 	_check(teach_bros["gaunt"] == 80 and teach_bros["bmega"] == 0
-			and teach_bros["enemies"] >= 160 and teach_bros["enemies"] <= 240,
+			and teach_bros["enemies"] >= 100 and teach_bros["enemies"] <= 260,
 			"spellbros teach-in: short mild decks, no megas")
 	var bros_out := _probe(TerrainSpawner.PHASE_VOID - 20.0, 80)
 	_check(bros_out["enemies"] == 0 and bros_out["mega"] == 0, "spellbros wind-down calm")
@@ -929,6 +937,7 @@ func _probe(d: float, n: int) -> Dictionary:
 			"dead": 0, "dfloor": 0, "dceil": 0,
 			"spring": 0, "svoid": 0, "gaunt": 0,
 			"blong": 0, "bshort": 0, "bmega": 0, "pads": 0, "gfrag": 0,
+			"sblob": 0, "pblob": 0,
 			"min_top": 9999.0, "max_top": -9999.0, "bad": 0,
 			"b1err": 0.0, "bsperr": 0.0, "arc": 0,
 			"sp_lo": 9.0, "sp_hi": 0.0, "bact": 0, "bpas": 0, "beacon": 0,
@@ -986,21 +995,23 @@ func _probe(d: float, n: int) -> Dictionary:
 			stats["builds"] += ceilf(s["gap"] / one_build)
 		elif s.get("bros", false):
 			if s.get("gkind", "") == "gaunt":
-				if s["climb"] == -1:
-					stats["builds"] += 1.0  # up-stairs: one platform each
-				elif s["climb"] == 1:
-					pass  # descending stairs are easy drops
-				elif s.get("mgap", false):
-					# a mega gap IS the build; one platform must bridge it
-					stats["builds"] += 1.0
-					if s["gap"] > one_build:
-						stats["bad"] += 1
+				if s["climb"] != 0:
+					# staircases: up-steps one build each, down-steps easy
+					# drops — and their squatter blobs counted separately
+					if s["climb"] == -1:
+						stats["builds"] += 1.0
+					stats["sblob"] += s["blobs"]
 				else:
-					# plain gaps follow the standard reach rule (rise cuts it)
-					var bdisc: float = 1170.0 * 1170.0 - 6600.0 * s["rise"]
-					if bdisc < 0.0 or s["gap"] > v * (1170.0 + sqrt(bdisc)) / 3300.0:
-						stats["bad"] += 1
-				if s["blobs"] > 0:
+					if s.get("mgap", false):
+						# a mega gap IS the build; one platform must bridge it
+						stats["builds"] += 1.0
+						if s["gap"] > one_build:
+							stats["bad"] += 1
+					else:
+						# plain gaps follow the standard reach rule
+						var bdisc: float = 1170.0 * 1170.0 - 6600.0 * s["rise"]
+						if bdisc < 0.0 or s["gap"] > v * (1170.0 + sqrt(bdisc)) / 3300.0:
+							stats["bad"] += 1
 					# the blob line: first blob clear of the entry landing,
 					# the cramped wall inside its bounds, and enough tail
 					# that the bounce off the LAST blob (0.663*v of carry)
@@ -1020,10 +1031,11 @@ func _probe(d: float, n: int) -> Dictionary:
 						stats["bshort"] += 1
 					if s.get("mgap", false):
 						stats["bmega"] += 1
-				# mid-air refuges stay hop-up-able (max jump height is 207)
-				stats["pads"] += s.get("pads", 0)
-				if s.get("pads", 0) > 0 and s.get("pad_rise", 0.0) > 195.0:
-					stats["bad"] += 1
+					# the second storey stays hop-up-able (max jump is 207)
+					stats["pads"] += s.get("pads", 0)
+					stats["pblob"] += s.get("pblobs", 0)
+					if s.get("pads", 0) > 0 and s.get("pad_rise", 0.0) > 195.0:
+						stats["bad"] += 1
 			elif s["gap"] > 0.68 * v:
 				stats["bad"] += 1  # wind-down: plain jumps
 		elif s.get("bridge", false):
