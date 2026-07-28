@@ -40,17 +40,6 @@ func _ready() -> void:
 	score_label.position = Vector2(48, 28)
 	root.add_child(score_label)
 
-	# runs lost since the app opened, dead centre at the top. Counts across
-	# retries and level changes — it is the day's tally, not this run's.
-	death_label = _label(44, Color("ff8a9b"))
-	root.add_child(death_label)
-	death_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	death_label.offset_left = -240.0
-	death_label.offset_right = 240.0
-	death_label.offset_top = 26.0
-	death_label.offset_bottom = 86.0
-	death_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
 	coin_label = _label(64, Color("f4c15d"))
 	root.add_child(coin_label)
 	coin_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -118,17 +107,30 @@ func _ready() -> void:
 	pause_button.add_theme_font_size_override("font_size", 44)
 	pause_button.focus_mode = Control.FOCUS_NONE
 	root.add_child(pause_button)
-	# shifted off dead centre: the death counter owns the middle now, and the
-	# button still sits well clear of the right-anchored energy readout
 	pause_button.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	pause_button.offset_left = 250.0
-	pause_button.offset_right = 390.0
+	pause_button.offset_left = -70.0
+	pause_button.offset_right = 70.0
 	pause_button.offset_top = 20.0
 	pause_button.offset_bottom = 110.0
 	pause_button.pressed.connect(_toggle_pause)
 
 	_build_game_over(root)
 	_build_menu(root)
+
+	# Runs lost since the app opened — the day's tally, not this run's. Only
+	# on the menu and the game-over panel: mid-run it is a number you can do
+	# nothing about, and the top of the screen is where the next gap appears.
+	# Added AFTER both panels so it sits on top of their dimming layers rather
+	# than being greyed out by the only two screens that show it.
+	death_label = _label(44, Color("ff8a9b"))
+	death_label.visible = false
+	root.add_child(death_label)
+	death_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	death_label.offset_left = -240.0
+	death_label.offset_right = 240.0
+	death_label.offset_top = 26.0
+	death_label.offset_bottom = 86.0
+	death_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# level banner: announces each level as you cross into it
 	banner_label = _label(88, Color("ffd75e"))
@@ -289,6 +291,7 @@ func show_menu(unlocked: int) -> void:
 		level_list.add_child(b)
 	menu_root.visible = true
 	pause_button.visible = false
+	death_label.visible = true
 	_update_spawn_row()
 
 
@@ -314,6 +317,7 @@ func _update_spawn_row() -> void:
 func hide_menu() -> void:
 	menu_root.visible = false
 	pause_button.visible = true
+	death_label.visible = false
 
 
 ## Big center-screen announcement when a level starts or is unlocked.
@@ -422,6 +426,7 @@ func show_game_over(score: int, best: int, from_name: String, retry_name: String
 	# this run began at — say so, so the jump is never a surprise
 	restart_label.text = "Tap to try again  —  " + retry_name
 	pause_button.visible = false
+	death_label.visible = true
 	over_root.visible = true
 	var tw := create_tween().set_loops()
 	tw.tween_property(restart_label, "modulate:a", 0.25, 0.6)

@@ -51,9 +51,11 @@ func _init() -> void:
 	aura.z_index = 40
 	add_child(aura)
 
-	# Focus Mode is a strong camera-focus frame made from persistent ColorRects.
-	# These are the same dependable CanvasItems used by the HUD and survive the
-	# Mobile renderer path that dropped the previous circle/Line2D shield.
+	# Focus Mode reads twice over: the camera-focus frame here, and the
+	# headphones drawn onto the commuter himself (see _draw). The frame is made
+	# of persistent ColorRects — the same dependable CanvasItems the HUD uses —
+	# so the effect survives the Mobile renderer path that dropped the original
+	# circle/Line2D shield.
 	shield_fill = ColorRect.new()
 	shield_fill.position = Vector2(-58, -65)
 	shield_fill.size = Vector2(116, 114)
@@ -244,6 +246,35 @@ func _draw() -> void:
 	draw_rect(Rect2(14, -29 + bob, 6, 9), Color("e4a978"))
 	draw_rect(Rect2(7, -27 + bob, 5, 5), Color("182532"))
 	draw_line(Vector2(8, -15 + bob), Vector2(14, -13 + bob), Color("9b5f4a"), 2.0)
+
+	# FOCUS MODE: he puts the headphones on. Blue over-ear cans, the
+	# noise-cancelling sort, drawn straight after the head so the band sits over
+	# the hair. The commuter is a PROFILE facing right — one eye at x 7, the
+	# nose bump at 14, the back of his head at -19 — so this is a side view of
+	# headphones: ONE cup, over the ear behind the eye, and the band arcing
+	# from it across the crown to vanish behind the far side of his head. A
+	# left-and-right pair put one cup on his face and one on his skull (Neven).
+	if shielded and not dead:
+		var band := Color("223350")
+		var cup := Color("1b2b45")
+		# the near cup, over the EAR — back third of the head, well clear of the
+		# cheek and the eye at x 7. Sitting it mid-head read as a cup strapped
+		# to his face.
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(-13, -34 + bob), Vector2(-1, -34 + bob), Vector2(2, -29 + bob),
+			Vector2(2, -21 + bob), Vector2(-1, -16 + bob), Vector2(-13, -16 + bob),
+			Vector2(-16, -21 + bob), Vector2(-16, -29 + bob),
+		]), cup)
+		# headband: up off the cup and over the crown, tucking back into the
+		# hair before the forehead — past that it is behind his head from here
+		draw_polyline(PackedVector2Array([
+			Vector2(-9, -33 + bob), Vector2(-13, -42 + bob), Vector2(-6, -49 + bob),
+			Vector2(4, -50 + bob), Vector2(11, -46 + bob), Vector2(14, -41 + bob),
+		]), band, 6.0, true)
+		# the cup's outer plate and its one control dot. Kept close in tone: a
+		# bright panel here read as a tiny screen.
+		draw_rect(Rect2(-12, -30 + bob, 10, 11), Color("3d6094"))
+		draw_rect(Rect2(-8, -25 + bob, 3, 3), Color("a8cbe8"))
 
 	# Backpack behind the body: the everyday-life silhouette reads before any
 	# facial detail does, even at phone scale.

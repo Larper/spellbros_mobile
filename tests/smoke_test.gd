@@ -300,8 +300,8 @@ func _run_tests() -> void:
 
 	# guaranteed star showcase: FOUNDATIONS always serves the double jump
 	# by ~150 m — mid-deck, at running height, on an enemy-free chunk —
-	# so it's learned before the themed bands. (No shield showcase: the
-	# generator never spawns shields, asserted after the band probes.)
+	# so it's learned before the themed bands. (Headphones have no guaranteed
+	# showcase — they are a rare band-gated roll, checked after the probes.)
 	main.spawner.star_given = false
 	main.spawner.climb_dir = 0
 	main.spawner.climb_steps_left = 0
@@ -674,7 +674,9 @@ func _run_tests() -> void:
 	print("TEST devgrants: shield=%s jumps=%d (expect true 1)" % [p.shielded, p.double_jumps])
 	_check(p.shielded and p.double_jumps == 1, "S/D dev powerup grants")
 	# the held-powerup readout: the world-space aura child AND the HUD chips
-	# must both light up while a powerup is held, and clear when it's spent
+	# must both light up while a powerup is held, and clear when it's spent.
+	# (Focus Mode also draws headphones onto the commuter, which no test can
+	# see — the focus frame asserted here is the checkable half.)
 	await create_timer(0.05).timeout
 	var ind_on: bool = p.aura.visible and p.aura.z_index == 40 \
 			and p.shield_fill.visible and p.shield_segments[0].visible \
@@ -735,11 +737,13 @@ func _run_tests() -> void:
 	print("TEST resume: paused=%s moving=%s (expect false true)" % [paused, moving])
 	_check(not paused and moving, "resume")
 
-	# audio: 6 synthesized SFX plus the looping city-groove track
-	print("TEST audio: sfx=%d (expect 6) music_len=%.1fs (expect ~17.1) looping=%s" % [
+	# audio: 8 synthesized SFX (the friend's ring and hang-up joined the six)
+	# plus the looping city-groove track
+	print("TEST audio: sfx=%d (expect 8) music_len=%.1fs (expect ~17.1) looping=%s" % [
 		main.audio.players.size(), main.audio.music.stream.get_length(),
 		main.audio.music.stream.loop_mode == AudioStreamWAV.LOOP_FORWARD])
-	_check(main.audio.players.size() == 6, "audio")
+	_check(main.audio.players.size() == 8 and main.audio.players.has("ring")
+			and main.audio.players.has("hangup"), "audio")
 
 	# city-groove clock: 8 bars of 4/4 at BPM, beat-synced theme installed
 	print("TEST citybeat: bpm=%.0f len=%.2fs (expect %.2f = 32 beats) theme=%s" % [
@@ -909,16 +913,21 @@ func _run_tests() -> void:
 			"spellbros wind-down: continuous calm floor")
 	var voidb := _probe(TerrainSpawner.PHASE_VOID + 120.0, 80)
 	_check(voidb["voids"] > 20 and voidb["mega"] == 0 and voidb["enemies"] == 0, "void endgame")
-	# shields NEVER spawn (Neven: a held shield intercepts a lethal touch
-	# before the brother's burn, pre-empting the SPELLBROS reveal — and a
-	# shield carries any distance, so no earlier band may serve one). The
-	# probes above generated thousands of chunks across every band; not
-	# one may have produced an orb.
-	var stray_shields := 0
-	for c in main.spawner.get_children():
-		if c is ShieldPickup:
-			stray_shields += 1
-	_check(stray_shields == 0, "no shield ever spawned by the generator")
+	# headphones: MORNING RUSH and NIGHT WALK serve them, nothing else does,
+	# and NIGHT WALK stops SHIELD_LOCKOUT_M short of FRIENDS so one is not
+	# routinely carried in ahead of the friend's own reveal. 400-chunk probes:
+	# the roll is rare and gated on enemy-free non-mega decks.
+	var sh_rush := _probe(230.0, 400)
+	var sh_night := _probe(Levels.start_m(Levels.UMBRA) + 60.0, 400)
+	var sh_late := _probe(Levels.start_m(Levels.BROS)
+			- TerrainSpawner.SHIELD_LOCKOUT_M + 20.0, 400)
+	var sh_bridge := _probe(Levels.start_m(Levels.BRIDGES) + 60.0, 400)
+	print("TEST shieldbands: rush=%d night=%d night_lockout=%d bridges=%d (expect >0 >0 0 0)" % [
+		sh_rush["shields"], sh_night["shields"], sh_late["shields"], sh_bridge["shields"]])
+	_check(sh_rush["shields"] > 0 and sh_night["shields"] > 0,
+			"headphones spawn in morning rush and night walk")
+	_check(sh_late["shields"] == 0 and sh_bridge["shields"] == 0,
+			"headphones stay out of the friends run-up and other bands")
 	# teach-ins: every level's first ~45 m is its mechanic in gentle form
 	var teach_spring := _probe(Levels.start_m(Levels.SPRINGS) + 10.0, 80)
 	_check(teach_spring["spring"] == 80 and teach_spring["enemies"] == 0 \
@@ -966,7 +975,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.flip_strip_start = 0.0
 	main.spawner.flip_ceil_y = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
-			"climb_up": 0, "hop": 0,
+			"climb_up": 0, "hop": 0, "shields": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "dfloor": 0, "dceil": 0,
 			"spring": 0, "svoid": 0, "sky": 0, "brun": 0, "gfrag": 0, "sout": 0,
@@ -999,6 +1008,7 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["pillar"]:
 			stats["pillars"] += 1
 		stats["stars"] += s["stars"]
+		stats["shields"] += s.get("shields", 0)
 		stats["beacon"] += s.get("beacon", 0)
 		stats["gfrag"] += s.get("gfrag", 0)
 		if s.get("sout", false):
@@ -1024,7 +1034,8 @@ func _probe(d: float, n: int) -> Dictionary:
 		if s["climb"] == 0 and not s["void"] and not s["pillar"]:
 			eligible += 1
 		span += s["gap"] + s["width"]
-		stats["mana"] += float(s["entities"] - s["enemies"] - s["stars"])
+		stats["mana"] += float(s["entities"] - s["enemies"] - s["stars"]
+				- s.get("shields", 0))
 		# --- beatability audit ---
 		var one_build := 1.418 * v + 240.0  # jump + platform deck + jump
 		if s["void"]:

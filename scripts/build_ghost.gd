@@ -24,6 +24,30 @@ extends Node2D
 
 var main  # Main, untyped to avoid a cyclic class reference
 
+## Latched by real HOVERING — pointer motion with no button held, at two
+## different positions. A finger cannot hover: touch reports motion only while
+## it is pressed, and Godot's touch-to-mouse emulation stamps the left button
+## onto those events. Requiring two distinct positions also rejects the lone
+## synthetic mousemove some mobile browsers fire just before a tap.
+##
+## This is the ONLY test, because no capability flag answers the question:
+## FEATURE_MOUSE is true on phones under the web platform, and
+## is_touchscreen_available() is true on plenty of desktops.
+var _hovered := false
+var _hover_at := Vector2(-9999.0, -9999.0)
+
+
+func _input(event: InputEvent) -> void:
+	if _hovered:
+		return
+	var motion := event as InputEventMouseMotion
+	if motion == null or motion.button_mask != 0:
+		return
+	if _hover_at.distance_to(motion.position) > 2.0:
+		if _hover_at.x > -9000.0:
+			_hovered = true
+		_hover_at = motion.position
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -35,7 +59,8 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if main == null or main.player == null or main.game_over or get_tree().paused:
+	if not _hovered or main == null or main.player == null or main.game_over \
+			or get_tree().paused:
 		visible = false
 		return
 	var vp := get_viewport()

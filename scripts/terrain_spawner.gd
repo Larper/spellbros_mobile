@@ -126,6 +126,17 @@ const CLIMB_BUILD_RISE_MAX := 270.0
 const MANA_CHANCE := 0.45
 const MANA_CHANCE_CLIMB := 0.65
 
+## ---- HEADPHONES (Focus Mode) ----------------------------------------------
+## Served by MORNING RUSH and NIGHT WALK only (Neven). They used to spawn
+## nowhere at all, because a held shield eats a lethal touch BEFORE the friend
+## can burn it and so lands the FRIENDS reveal one hit late. Two bands' worth
+## of Focus Mode is worth that much: the band has hundreds of notifications,
+## so the friend still introduces himself within seconds. NIGHT WALK stops
+## handing them out SHIELD_LOCKOUT_M short of the boundary, so carrying one
+## across takes a deliberate untouched run rather than luck.
+const SHIELD_CHANCE := 0.12
+const SHIELD_LOCKOUT_M := 90.0
+
 const BASE_Y_MIN := 690.0
 const BASE_Y_MAX := 970.0
 const SKY_Y_MIN := 250.0
@@ -163,11 +174,8 @@ var bros_line := 650.0
 # Guaranteed star showcase (Neven): FOUNDATIONS must serve the double
 # jump between 110 and 150 m so it's met and understood before the
 # themed bands. One flag per run; forced near the window's end if the
-# rolls never landed it. The SHIELD never spawns anywhere at or before
-# SPELLBROS (i.e. nowhere): a held shield intercepts the lethal touch
-# BEFORE the brother's burn, pre-empting the band's whole reveal — and
-# a shield can be carried any distance, so no earlier band may serve
-# one either. The pickup class stays for the dev grant.
+# rolls never landed it. (Headphones are handed out by band instead —
+# see SHIELD_CHANCE.)
 var star_given := false
 
 
@@ -323,11 +331,27 @@ func _spawn_chunk() -> Dictionary:
 		stars = 1
 		used += 1
 
+	# headphones (Focus Mode), in the two bands that serve them. Rolled BEFORE
+	# the enemies, exactly like the showcase star: from PHASE_SWARM on, four
+	# decks in five carry a notification, so a roll that demanded an already
+	# enemy-free deck fired about once per four hundred chunks — which is to
+	# say never. Claiming the deck is what makes them findable, and it buys
+	# the same safe walked-into pickup the star gets.
+	# A mega's far deck counts, unlike the star's: excluding megas AND climb
+	# steps left only one chunk in eight eligible at depth, which is how the
+	# roll came out to one headphone every other run through the band.
+	var shields := 0
+	if used < budget and stars == 0 and climb_dir == 0 \
+			and _serves_shield(d) and rng.randf() < SHIELD_CHANCE:
+		_place_shield(Vector2(x + rng.randf_range(w * 0.35, w * 0.65), top_y - 60.0))
+		used += 1
+		shields = 1
+
 	# enemies (never on climb stairs — those are about building — never in
-	# a teach-in stretch, and never sharing a deck with the showcase star)
+	# a teach-in stretch, and never sharing a deck with a walked-into powerup)
 	var enemies := 0
 	if d >= PHASE_ENEMY and w > ENEMY_MIN_W and climb_dir == 0 and not calm \
-			and stars == 0:
+			and stars == 0 and shields == 0:
 		var chance := SWARM_CHANCE if d >= PHASE_SWARM else ENEMY_CHANCE
 		if rng.randf() < chance:
 			enemies = 1
@@ -374,7 +398,7 @@ func _spawn_chunk() -> Dictionary:
 	# on an enemy-free deck — powerups spawned up at apex height were hard
 	# to pick up and read as bait (Neven, twice). Same entity budget.
 	if d >= PHASE_ENEMY and used < budget and enemies == 0 and not mega \
-			and stars == 0 and rng.randf() < 0.1:
+			and stars == 0 and shields == 0 and rng.randf() < 0.1:
 		_place_star(Vector2(x + rng.randf_range(w * 0.35, w * 0.65), top_y - 60.0))
 		used += 1
 		stars = 1
@@ -387,7 +411,7 @@ func _spawn_chunk() -> Dictionary:
 		"enemies": enemies, "entities": used, "climb": climb_dir,
 		"void": false, "pillar": false, "stars": stars,
 		"beacon": beacon, "rise": rise, "speed": v,
-		"hop": climb_dir == -1 and climb_hop,
+		"hop": climb_dir == -1 and climb_hop, "shields": shields,
 	}
 
 
@@ -1040,6 +1064,24 @@ func _maybe_star(x: float, w: float, top_y: float, chance: float) -> int:
 		return 0
 	_place_star(Vector2(x + w * 0.5, top_y - 60.0))
 	return 1
+
+
+## True in the bands that hand out headphones: MORNING RUSH once there is
+## something to be shielded from, and NIGHT WALK up to the lockout before
+## FRIENDS (see SHIELD_CHANCE for why the lockout exists).
+func _serves_shield(d: float) -> bool:
+	var lv := Levels.level_for(d)
+	if lv == 0:
+		return d >= PHASE_ENEMY
+	if lv == Levels.UMBRA:
+		return Levels.start_m(Levels.BROS) - d > SHIELD_LOCKOUT_M
+	return false
+
+
+func _place_shield(pos: Vector2) -> void:
+	var orb := ShieldPickup.new()
+	orb.position = pos
+	add_child(orb)
 
 
 func _place_star(pos: Vector2) -> void:

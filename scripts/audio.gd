@@ -45,6 +45,25 @@ func _ready() -> void:
 	# boing: springy rising triangle for spring-pad launches
 	_add_sfx("boing", _sweep(160.0, 640.0, 0.25, 2, 0.45, 2.0), -6.0, 2)
 
+	# ring: the friend calling. Two chirps and a rest, the shape of a phone
+	# ringing rather than any particular handset — long enough to loop under
+	# the whole ring-in without the second burst arriving late.
+	var ring := PackedFloat32Array()
+	for burst in range(2):
+		var tone := _sweep(1046.5, 1046.5, 0.16, 0, 0.26, 2.2)
+		_mix_into(tone, _sweep(1318.51, 1318.51, 0.16, 0, 0.16, 2.2), 0)
+		ring.append_array(tone)
+		var rest := PackedFloat32Array()
+		rest.resize(int((0.10 if burst == 0 else 0.28) * RATE))
+		ring.append_array(rest)
+	_add_sfx("ring", ring, -11.0, 1)
+
+	# hangup: the two-tone drop of a call ending, then a short flat blip
+	var hangup := _sweep(620.0, 460.0, 0.13, 0, 0.30, 3.0)
+	hangup.append_array(_sweep(360.0, 240.0, 0.26, 0, 0.30, 4.0))
+	_mix_into(hangup, _sweep(0.0, 0.0, 0.05, 3, 0.04, 16.0), 0)
+	_add_sfx("hangup", hangup, -8.0, 1)
+
 	music = AudioStreamPlayer.new()
 	music.stream = _make_city_groove()
 	music.volume_db = -13.0

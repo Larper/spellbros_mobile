@@ -131,17 +131,20 @@ func _ready() -> void:
 	hud.update_score(0)
 	hud.update_deaths(Main.deaths)
 
-	# PC only: the build aim ghost. A finger already marks its own aim point,
-	# so touch devices have nothing to preview (and headless has no mouse).
-	# It gets its own CanvasLayer UNDER the HUD's: drawing in screen space is
-	# what keeps it nailed to the cursor while the world slides past.
-	if DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE):
-		var ghost_layer := CanvasLayer.new()
-		ghost_layer.layer = 1
-		add_child(ghost_layer)
-		ghost = BuildGhost.new()
-		ghost.main = self
-		ghost_layer.add_child(ghost)
+	# The build aim ghost. Whether it ever SHOWS is decided by BuildGhost
+	# itself, from whether a real mouse has hovered — no capability flag on
+	# this platform answers the question. FEATURE_MOUSE is reported true on
+	# phones by the web platform; is_touchscreen_available() is reported true
+	# on this desktop (pen/precision-touchpad support counts), which is what
+	# made the ghost vanish on PC. A hover is the one thing only a mouse does.
+	# Its own CanvasLayer sits UNDER the HUD's: drawing in screen space is what
+	# keeps it nailed to the cursor while the world slides past.
+	var ghost_layer := CanvasLayer.new()
+	ghost_layer.layer = 1
+	add_child(ghost_layer)
+	ghost = BuildGhost.new()
+	ghost.main = self
+	ghost_layer.add_child(ghost)
 
 	psy = PsyTheme.new()
 	add_child(psy)
@@ -216,6 +219,12 @@ func _physics_process(delta: float) -> void:
 		wizard_light.enabled = dark > 0.01
 		wizard_light.energy = 1.2 * dark
 		bro.active = lv == Levels.BROS
+		# The phone starts ringing with the FRIENDS banner — one banner-lead
+		# ahead of the boundary — so the call is answered right as the ground
+		# drops away, and hangs up when the band ends. `active` still gates
+		# the guard itself, so nothing is intercepted before the band proper.
+		bro.calling = lv == Levels.BROS or (lv < Levels.BROS \
+				and distance_m + banner_lead_for(Levels.BROS) >= Levels.start_m(Levels.BROS))
 		var flip_zone := in_flip_zone()
 		if not flip_zone and player.gravity_dir < 0.0:
 			player.gravity_dir = 1.0  # the wind-down / next level rights the world

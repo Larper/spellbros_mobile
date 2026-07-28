@@ -10,10 +10,35 @@ const HOVER := Vector2(-72.0, -158.0)
 const BURN_COST := 1
 const THROW_TIME := 0.22
 
+## The call is a call: it rings, it is answered, and at the end of the band it
+## is hung up. Popping a fully-drawn video window into existence at the level
+## boundary and deleting it at the next one read as a glitch (Neven).
+## `calling` is driven by Main from the FRIENDS banner, so the phone starts
+## ringing while the banner is still on screen and connects as the ground drops
+## away; `active` still gates the guard itself, so nothing is intercepted
+## before the band proper.
+enum { OFF, RINGING, ANSWERING, LIVE, HANGUP }
+const RING_TIME := 1.15
+const ANSWER_TIME := 0.32
+const HANGUP_TIME := 0.85
+## The hang-up plays out in two beats: the red end-call button pops up over the
+## window and is pressed, and only THEN does the window close. Collapsing the
+## window on its own just read as the friend disappearing again.
+const HANGUP_PRESS := 0.34
+const RING_BEAT := 0.72  # matches the two-chirp ring sample's length
+
 var active := false
+var calling := false
 var t := randf() * TAU
 var beam_t := 0.0  # kept as the throw countdown for test/backward compatibility
 var beam_to := Vector2.ZERO
+var phase := OFF
+var phase_t := 0.0
+var ring_beat := 0.0
+
+
+func _ready() -> void:
+	visible = false  # nothing on screen until the phone actually rings
 
 
 ## The follow runs on the PHYSICS tick, not the frame: physics interpolation
@@ -23,15 +48,92 @@ var beam_to := Vector2.ZERO
 func _physics_process(delta: float) -> void:
 	t += delta
 	beam_t = maxf(0.0, beam_t - delta)
-	visible = active
-	if not active:
+	_advance_call(delta)
+	visible = phase != OFF
+	if not visible:
 		return
 	var main = get_tree().get_first_node_in_group("main")
 	if main == null or main.player == null:
 		return
+	# the ring-in slides down into the hover spot; the hang-up drops away
 	global_position = main.player.global_position + HOVER \
-			+ Vector2(0.0, sin(t * 2.4) * 5.0)
+			+ Vector2(0.0, sin(t * 2.4) * 5.0 - 190.0 * _slide())
 	queue_redraw()
+
+
+func _advance_call(delta: float) -> void:
+	phase_t += delta
+	match phase:
+		OFF:
+			if calling:
+				_enter(RINGING)
+		RINGING:
+			if not calling:
+				_enter(HANGUP)
+			elif phase_t >= RING_TIME:
+				_enter(ANSWERING)
+			else:
+				ring_beat -= delta
+				if ring_beat <= 0.0:
+					ring_beat = RING_BEAT
+					_sfx("ring")
+		ANSWERING:
+			if phase_t >= ANSWER_TIME:
+				_enter(LIVE)
+		LIVE:
+			if not calling:
+				_enter(HANGUP)
+		HANGUP:
+			if calling:
+				_enter(RINGING)  # re-entering the band mid-hang-up: ring again
+			elif phase_t >= HANGUP_TIME:
+				_enter(OFF)
+
+
+func _enter(next: int) -> void:
+	phase = next
+	phase_t = 0.0
+	match next:
+		RINGING:
+			ring_beat = 0.0  # first chirp on the very next tick
+		ANSWERING:
+			_sfx("pickup")   # the connect chime
+		HANGUP:
+			_sfx("hangup")
+
+
+func _sfx(sfx_name: String) -> void:
+	var main = get_tree().get_first_node_in_group("main")
+	if main != null and main.audio != null:
+		main.audio.play(sfx_name)
+
+
+## 0 = parked in the hover spot, 1 = fully off-screen above it. Drives the
+## slide on the way in and the drop on the way out.
+func _slide() -> float:
+	if phase == RINGING:
+		# ease-out: the window arrives fast, then settles
+		var k := clampf(phase_t / 0.45, 0.0, 1.0)
+		return (1.0 - k) * (1.0 - k)
+	if phase == HANGUP:
+		return -0.35 * _closing() * _closing()  # drops away once the call ends
+	return 0.0
+
+
+## 0 while the end-call button is still being shown and pressed, ramping to 1
+## as the window actually closes.
+func _closing() -> float:
+	return clampf((phase_t - HANGUP_PRESS) / (HANGUP_TIME - HANGUP_PRESS), 0.0, 1.0)
+
+
+## Overall opacity of the window: fades up with the ring-in, out with the
+## hang-up, solid in between.
+func _call_alpha() -> float:
+	if phase == RINGING:
+		return clampf(phase_t / 0.3, 0.0, 1.0)
+	if phase == HANGUP:
+		return 1.0 - _closing()
+	return 1.0
 
 
 ## Called by SpikeBlob on a would-be-lethal touch. The protection mechanic is
@@ -52,16 +154,26 @@ func try_guard(at: Vector2) -> bool:
 
 
 func _draw() -> void:
-	if not active:
+	if phase == OFF:
 		return
 	var main = get_tree().get_first_node_in_group("main")
+	var ca := _call_alpha()
+	if phase == RINGING:
+		_draw_ringing(ca)
+		return
 	var fueled: bool = main != null and main.coins >= BURN_COST
-	var alpha := (0.96 if fueled else 0.40) + 0.04 * sin(t * 5.0)
+	var alpha := ((0.96 if fueled else 0.40) + 0.04 * sin(t * 5.0)) * ca
 
 	# The can travels on a short readable arc. Drawing it behind the call bubble
 	# makes it look as if the friend throws it out of the video window.
 	if beam_t > 0.0:
 		_draw_throw(1.0 - beam_t / THROW_TIME)
+
+	# ANSWERING opens the window out of the ringing pill's footprint; HANGUP
+	# collapses it back to a line, the way a call window closes.
+	var ws := _window_scale()
+	if ws != Vector2.ONE:
+		draw_set_transform(Vector2.ZERO, 0.0, ws)
 
 	# Mobile-safe video-call card. Some devices drop custom circles/polygons on
 	# this following CanvasItem, so the entire persistent portrait deliberately
@@ -99,6 +211,94 @@ func _draw() -> void:
 	draw_rect(Rect2(30, -44, 10, 10), Color(0.35, 0.86, 0.46, alpha))
 	draw_rect(Rect2(-13, 38, 26, 7), Color(0.90, 0.25, 0.24, alpha))
 	draw_rect(Rect2(-6, 40, 12, 2), Color(1.0, 0.84, 0.80, alpha))
+	# the moment of connection: a green wash across the window that fades out
+	if phase == ANSWERING:
+		var flash := 1.0 - clampf(phase_t / ANSWER_TIME, 0.0, 1.0)
+		draw_rect(Rect2(-50, -54, 100, 104), Color(0.35, 0.86, 0.46, 0.45 * flash))
+	if ws != Vector2.ONE:
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if phase == HANGUP:
+		_draw_hangup_button()
+
+
+## The red end-call button: pops up over the window, gets pressed, and the
+## window only closes behind it. Sits slightly low so it reads as a control
+## laid over the call rather than part of the picture.
+func _draw_hangup_button() -> void:
+	var fade := clampf(1.0 - (phase_t - HANGUP_PRESS) / 0.26, 0.0, 1.0)
+	if fade <= 0.0:
+		return
+	var pop := clampf(phase_t / 0.13, 0.0, 1.0)
+	var s := 1.0 - pow(1.0 - pop, 3.0)
+	var pressed: bool = phase_t >= HANGUP_PRESS - 0.09
+	if pressed:
+		s *= 0.86
+	# low in the window, and small enough to leave the friend's face visible —
+	# it is a control laid over the call, not a lid slammed on it
+	var at := Vector2(0.0, 27.0)
+	draw_set_transform(at, 0.0, Vector2(s, s))
+	draw_colored_polygon(_disc(Vector2.ZERO, 22.0, 16), Color(0.45, 0.06, 0.07, 0.5 * fade))
+	draw_colored_polygon(_disc(Vector2.ZERO, 18.0, 16), Color(0.86, 0.19, 0.18, fade))
+	draw_colored_polygon(_disc(Vector2.ZERO, 14.0, 16), Color(0.95, 0.31, 0.28, fade))
+	# handset rotated the way an end-call icon always is
+	draw_set_transform(at, 2.36, Vector2(s, s))
+	draw_rect(Rect2(-8.0, -3.0, 16.0, 5.0), Color(1.0, 0.94, 0.93, fade))
+	draw_rect(Rect2(-9.5, -1.5, 5.0, 7.0), Color(1.0, 0.94, 0.93, fade))
+	draw_rect(Rect2(4.5, -1.5, 5.0, 7.0), Color(1.0, 0.94, 0.93, fade))
+	# a white flash on the press itself
+	if pressed and phase_t < HANGUP_PRESS + 0.07:
+		draw_set_transform(at, 0.0, Vector2(s, s))
+		draw_colored_polygon(_disc(Vector2.ZERO, 18.0, 16),
+				Color(1.0, 0.96, 0.94, 0.5 * fade))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Window scale through the connect and the hang-up. ANSWERING grows out of
+## the ringing pill's footprint (92x52 vs the live window's 100x104); HANGUP
+## squashes vertically to a closing line.
+func _window_scale() -> Vector2:
+	if phase == ANSWERING:
+		var k := clampf(phase_t / ANSWER_TIME, 0.0, 1.0)
+		var e := 1.0 - pow(1.0 - k, 3.0)
+		return Vector2(lerpf(0.9, 1.0, e), lerpf(0.5, 1.0, e))
+	if phase == HANGUP:
+		var k := _closing()
+		return Vector2(lerpf(1.0, 0.82, k), lerpf(1.0, 0.1, k))
+	return Vector2.ONE
+
+
+## The incoming-call pill: a compact card with the caller's thumbnail, a
+## shaking handset and ")))" ring waves pulsing out of it. Blocks and lines
+## only, for the same renderer reasons as the live window above.
+func _draw_ringing(a: float) -> void:
+	var ring := fmod(t * 2.2, 1.0)
+	var shake := sin(t * 26.0) * 2.0
+	draw_rect(Rect2(-43, -25, 92, 52), Color(0.02, 0.08, 0.12, 0.32 * a))
+	draw_rect(Rect2(-46, -28, 92, 52), Color(0.06, 0.20, 0.27, 0.96 * a))
+	draw_rect(Rect2(-46, -28, 92, 4), Color(0.43, 0.88, 0.86, a))
+	draw_rect(Rect2(-46, 20, 92, 4), Color(0.43, 0.88, 0.86, a))
+	draw_rect(Rect2(-46, -28, 4, 52), Color(0.43, 0.88, 0.86, a))
+	draw_rect(Rect2(42, -28, 4, 52), Color(0.43, 0.88, 0.86, a))
+	# caller thumbnail: the same warm face and orange hoodie as the live window
+	draw_rect(Rect2(-38, -19, 20, 15), Color(0.93, 0.66, 0.46, a))
+	draw_rect(Rect2(-38, -21, 20, 5), Color(0.16, 0.12, 0.11, a))
+	draw_rect(Rect2(-40, -3, 24, 15), Color(0.91, 0.42, 0.24, a))
+	# a name bar and a status line stand in for text at this size
+	draw_rect(Rect2(-11, -17, 32, 6), Color(0.85, 0.94, 0.95, 0.9 * a))
+	draw_rect(Rect2(-11, -7, 20, 4), Color(0.55, 0.75, 0.80, 0.8 * a))
+	# handset, rattling in its cradle
+	var hx := 24.0
+	draw_rect(Rect2(hx - 7, 2 + shake, 14, 5), Color(0.35, 0.86, 0.46, a))
+	draw_rect(Rect2(hx - 8, 5 + shake, 5, 8), Color(0.35, 0.86, 0.46, a))
+	draw_rect(Rect2(hx + 3, 5 + shake, 5, 8), Color(0.35, 0.86, 0.46, a))
+	for i in range(3):
+		var q := fmod(ring + float(i) * 0.33, 1.0)
+		var r := 9.0 + 15.0 * q
+		draw_polyline(PackedVector2Array([
+			Vector2(hx + r * 0.55, 4.0 - r * 0.55 + shake),
+			Vector2(hx + r, 5.0 + shake),
+			Vector2(hx + r * 0.55, 6.0 + r * 0.55 + shake),
+		]), Color(0.35, 0.86, 0.46, (1.0 - q) * a), 2.5, true)
 
 
 func _draw_throw(progress: float) -> void:
