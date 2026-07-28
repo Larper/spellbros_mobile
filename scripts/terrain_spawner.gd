@@ -29,6 +29,11 @@ const PHASE_VOID := 1800.0  # the endgame after the SPELLBROS level
 
 const FLIP_CORRIDOR := 560.0  # floor-to-ceiling height in the FLIPSIDE level
 const FLIP_DEAD_CHANCE := 0.25  # dead zones: both surfaces gone, build to cross
+## Corridor transit time: free-fall across FLIP_CORRIDOR from rest under
+## gravity 3300 = sqrt(560/1650) s. Strip widths and the fragment trail are
+## both derived from this one number, so they can never disagree about where
+## a flip taken inside the shared window actually puts you down.
+const FLIP_TRANSIT := 0.583
 ## Wind-down: a band's last meters return to calm, plain terrain before the
 ## next level's twist (FLIPSIDE: continuous floor + taps become jumps again;
 ## BRIDGES: blob-free easy gaps). RUNWAY_M: FLIPSIDE's opening stretch stays
@@ -81,6 +86,42 @@ const ENEMY_SPEED_RAMP_END := 500.0
 
 const CLIMB_CHANCE := 0.3
 const CLIMB_COOLDOWN := 4         # flat chunks required between climb waves
+## ---- STAIRCASE FLAVOURS ---------------------------------------------------
+## A climb wave is one flavour end to end, so a staircase never lies about
+## what it wants (Neven: steps that looked hoppable but were 250 px tall read
+## as a bug, not a puzzle).
+##   HOP    steps rise well inside the 207 px jump ceiling and the tread stays
+##          inside the rising-jump reach — climbed on taps alone.
+##   BUILD  steps stay deliberately unjumpable AND open a wide, obvious hole,
+##          with a coffee hung in it at pad height: the cup IS the "build
+##          here" marker.
+const CLIMB_HOP_CHANCE := 0.5
+const CLIMB_HOP_RISE_MIN := 100.0
+const CLIMB_HOP_RISE_MAX := 145.0
+const CLIMB_HOP_GAP_FRAC := 0.42  # cap vs. run speed; 0.42 < 0.557 rising reach
+## BUILD-step geometry is measured in SECONDS OF FLIGHT, then multiplied by
+## the live run speed — a fixed pixel gap is a different manoeuvre at 470 and
+## at the 900 px/s cap. The 300-420 px version worked early and broke at the
+## cap: the pad landed you a few frames from the next pillar's face, so the
+## second hop had no room and you ran into the wall (Neven).
+## The intended line, unchanged at every speed:
+##   1. jump off the lower deck,
+##   2. land on the pad built on the marker cup — the cup sits exactly where
+##      that arc comes back DOWN through pad height,
+##   3. jump off the pad onto the step.
+## CLIMB_PAD_H is the pad TOP's height above the lower deck: 57 px under the
+## 207 px jump ceiling on the way in, and it leaves at most 120 px for the
+## second hop. RUNOUT is the pad centre -> step face distance, sized to sit
+## mid-window for that second hop anywhere along the pad.
+const CLIMB_PAD_H := 150.0
+## 0.45 rather than the 0.40 mid-window figure: the pad's 120 px half-width is
+## a quarter of a second at 470 px/s but only an eighth at 900, so the low-speed
+## end is where a late take-off runs out of room. This keeps the worst corner
+## (min speed, max rise, jumping off the pad's very last pixel) 33 px clear of
+## the step's face instead of 9.
+const CLIMB_BUILD_RUNOUT := 0.45
+const CLIMB_BUILD_RISE_MIN := 250.0
+const CLIMB_BUILD_RISE_MAX := 270.0
 
 const MANA_CHANCE := 0.45
 const MANA_CHANCE_CLIMB := 0.65
@@ -97,6 +138,7 @@ var rng := RandomNumberGenerator.new()
 # climb wave state: 0 = level terrain, -1 = climbing, +1 = descending
 var climb_dir := 0
 var climb_steps_left := 0
+var climb_hop := false  # this wave's flavour (see CLIMB_HOP_CHANCE)
 var flat_chunks_since_wave := 99  # ready for a wave from the start of the phase
 
 # double-mega combo: set when a mega rolls the chain, forces the next chunk mega
@@ -200,10 +242,19 @@ func _spawn_chunk() -> Dictionary:
 	var dy: float
 
 	if climb_dir == -1:
-		# stair step up, beyond jump height: must build
-		gap = rng.randf_range(150.0, 230.0)
-		w = rng.randf_range(320.0, 480.0)
-		dy = -rng.randf_range(240.0, 300.0)
+		if climb_hop:
+			# HOP staircase: the same close tread as before, but every step
+			# is now genuinely jumpable — no mana, no stopping, just rhythm
+			gap = minf(rng.randf_range(150.0, 230.0), CLIMB_HOP_GAP_FRAC * v)
+			w = rng.randf_range(320.0, 480.0)
+			dy = -rng.randf_range(CLIMB_HOP_RISE_MIN, CLIMB_HOP_RISE_MAX)
+		else:
+			# BUILD staircase: a step unmistakably out of reach, over a hole
+			# sized in flight time so the pad-then-hop line has the same room
+			# at 900 px/s as at 470. The marker cup goes in at climb_pad_x.
+			gap = climb_pad_x(v) + CLIMB_BUILD_RUNOUT * v
+			w = rng.randf_range(380.0, 520.0)
+			dy = -rng.randf_range(CLIMB_BUILD_RISE_MIN, CLIMB_BUILD_RISE_MAX)
 		climb_steps_left -= 1
 	elif climb_dir == 1:
 		# stair step back down: easy drops
@@ -235,6 +286,15 @@ func _spawn_chunk() -> Dictionary:
 	_place_chunk(x, top_y, w)
 
 	var used := 0
+
+	# BUILD-staircase marker: a cup floating in the hole exactly where a pad
+	# belongs — it is the whole point of this flavour. See the coffee, build
+	# under it, collect it on the way up, and the step has paid for itself.
+	# The cup is the pad's CENTRE, so it hangs half a slab below the pad top.
+	if climb_dir == -1 and not climb_hop:
+		_place_coin(Vector2(next_x + climb_pad_x(v),
+				last_top_y - CLIMB_PAD_H + BuiltPlatform.SIZE.y * 0.5))
+		used += 1
 
 	# one crystal floating over a mega gap: reward for bridging it
 	if mega:
@@ -327,6 +387,7 @@ func _spawn_chunk() -> Dictionary:
 		"enemies": enemies, "entities": used, "climb": climb_dir,
 		"void": false, "pillar": false, "stars": stars,
 		"beacon": beacon, "rise": rise, "speed": v,
+		"hop": climb_dir == -1 and climb_hop,
 	}
 
 
@@ -517,25 +578,32 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 		var w := rng.randf_range(0.7 * v, 1.0 * v)
 		var x := next_x + gap
 		var used := 0
+		# The cup rides the exact line you fall along after running off the
+		# lost edge — the free-fall drop at mid-gap, measured in the wizard's
+		# OWN gravity direction. The old placement hung it 240 px the other
+		# way, out in the corridor: a marker for a crossing nobody can make,
+		# pointing away from the pad that actually saves you (Neven).
+		var fall_mid := 1650.0 * pow(gap * 0.5 / v, 2.0)
 		var far_y: float
 		if flip_on_floor:
 			far_y = clampf(floor_y + rng.randf_range(60.0, 110.0), 800.0, 940.0)
 			_place_chunk(x, far_y, w)
 			if rng.randf() < 0.7:
 				# the reward for paying the bridge toll hangs over the emptiness
-				_place_coin(Vector2(next_x + gap * 0.5, floor_y - 240.0))
+				_place_coin(Vector2(next_x + gap * 0.5, last_top_y + fall_mid))
 				used = 1
 		else:
 			# mirrored off the ACTUAL face the wizard runs (never the drifted
 			# floor bookkeeping: a far ceiling even a hair lower than the
 			# takeoff face is a wall to an upward-falling runner)
+			var from_face := flip_ceil_y
 			var face := flip_ceil_y \
 					- rng.randf_range(60.0, minf(110.0, flip_ceil_y - 240.0))
 			_place_ceiling(x, face, w)
 			flip_ceil_y = face
 			far_y = face + FLIP_CORRIDOR
 			if rng.randf() < 0.7:
-				_place_coin(Vector2(next_x + gap * 0.5, face + 240.0))
+				_place_coin(Vector2(next_x + gap * 0.5, from_face - fall_mid))
 				used = 1
 		next_x = x + w
 		last_top_y = far_y
@@ -547,24 +615,31 @@ func _spawn_flip_chunk(d: float, v: float) -> Dictionary:
 			"overlap": ov, "stars": 0, "rise": 0.0, "speed": v,
 		}
 
-	# chain strip: the opposite surface, starting ov inside the current one
-	var w := rng.randf_range(1.1 * v, 1.4 * v) if teach else rng.randf_range(0.75 * v, 1.1 * v)
+	# chain strip: the opposite surface, starting ov inside the current one.
+	# It must outlast the whole shared window PLUS the transit that window can
+	# start: a flip taken at the very last moment (ov in) touches down
+	# FLIP_TRANSIT*v later, and a strip ending before that drops the run into
+	# the hole. The old 0.75*v floor was 0.13*v short of that (Neven: chasing
+	# the coffee off the end of the strip).
+	var w := rng.randf_range(ov + FLIP_TRANSIT * v + 0.20 * v,
+			ov + FLIP_TRANSIT * v + 0.45 * v)
 	var start := next_x - ov
 	flip_strip_start = start
 	var used := 0
 	if rng.randf() < 0.6:
-		# crystals ride the FLIP TRANSIT itself: sampled from the corridor-
-		# crossing free-fall arc (gravity 3300 from rest), fired from MID
-		# window — chasing the mana IS taking the flip on time. Random
-		# placements read as noise in this level (Neven), and the trail
-		# starts 129 px off the surface (tau 0.28): a fragment hugging a
-		# strip's edge baits the player toward the drop-off (Neven again).
-		var x0 := start + 0.45 * ov
-		for tau: float in [0.28, 0.42, 0.54]:
-			var fall := 1650.0 * tau * tau
-			var fy := (floor_y - 20.0 - fall) if flip_on_floor \
-					else (floor_y - FLIP_CORRIDOR + 20.0 + fall)
-			_place_coin(Vector2(x0 + v * tau, fy))
+		# Crystals mark the DESTINATION, not the transit. The old trail was
+		# sampled along the corridor-crossing arc, which hung cups out past
+		# the end of the surface the wizard was still standing on — follow
+		# them without flipping and you ran straight off the edge (Neven).
+		# They now hug the FAR strip at running height, starting just past
+		# the earliest possible touchdown: the coffee says "be over there",
+		# and flipping EARLY sweeps up more of it than flipping late.
+		var far_face := (floor_y - FLIP_CORRIDOR) if flip_on_floor else floor_y
+		# fragments sit off the WALKABLE face: below a ceiling, above a floor
+		var side := 1.0 if flip_on_floor else -1.0
+		for i in range(3):
+			var fx := start + (FLIP_TRANSIT + 0.10 + 0.16 * float(i)) * v
+			_place_coin(Vector2(fx, far_face + side * 60.0))
 		used = 3
 	if flip_on_floor:
 		_place_ceiling(start, floor_y - FLIP_CORRIDOR, w)
@@ -899,8 +974,15 @@ func _update_climb_state(d: float) -> void:
 				and flat_chunks_since_wave >= CLIMB_COOLDOWN and rng.randf() < CLIMB_CHANCE:
 			climb_dir = -1
 			climb_steps_left = 2 + rng.randi() % 3
+			# the flavour is chosen once per wave and holds for every step
+			climb_hop = rng.randf() < CLIMB_HOP_CHANCE
 	elif climb_dir == -1:
-		if climb_steps_left <= 0 or last_top_y <= SKY_Y_MIN + 20.0:
+		# A wave turns around while there is still room for a FULL step. The
+		# old check let one last step get clamped against SKY_Y_MIN, which
+		# quietly emitted a stair of some other height than the flavour asked
+		# for — and for BUILD steps that broke the pad geometry outright.
+		var headroom := CLIMB_HOP_RISE_MAX if climb_hop else CLIMB_BUILD_RISE_MAX
+		if climb_steps_left <= 0 or last_top_y - headroom <= SKY_Y_MIN:
 			climb_dir = 1
 	else:
 		if last_top_y >= 860.0:
@@ -915,6 +997,16 @@ func _update_climb_state(d: float) -> void:
 func _is_teach(d: float) -> bool:
 	var lv := Levels.level_for(d)
 	return lv > 0 and d - Levels.start_m(lv) < TEACH_M
+
+
+## Where the jump off a BUILD step's lower deck comes back DOWN through pad
+## height — so where the marker cup, and therefore the pad, belongs. It falls
+## straight out of the jump arc (GRAVITY 3300, JUMP_VELOCITY -1170) and scales
+## with the run speed, which is the whole fix: at the 900 px/s cap the wizard
+## is still rising 400 px out, so a pad parked mid-gap at a fixed 150-210 px
+## was somewhere he simply never passed through.
+func climb_pad_x(v: float) -> float:
+	return v * (1170.0 + sqrt(1170.0 * 1170.0 - 6600.0 * CLIMB_PAD_H)) / 3300.0
 
 
 func enemy_speed_for(d: float) -> float:

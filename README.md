@@ -157,7 +157,7 @@ rendering, audio synthesis, and game logic execute locally inside Godot.
 
 ```powershell
 # run the game
-godot --path "C:\Dev\spellbros_mobile"
+godot --path "C:\Dev\Everyday Life"
 
 # headless smoke test — the only automated verification
 godot --headless --path . -s res://tests/smoke_test.gd

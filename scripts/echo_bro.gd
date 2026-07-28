@@ -16,7 +16,11 @@ var beam_t := 0.0  # kept as the throw countdown for test/backward compatibility
 var beam_to := Vector2.ZERO
 
 
-func _process(delta: float) -> void:
+## The follow runs on the PHYSICS tick, not the frame: physics interpolation
+## smooths every other moving node from its physics transforms, so a node that
+## repositioned itself per frame would be the one thing visibly lagging the
+## commuter it is supposed to hover over.
+func _physics_process(delta: float) -> void:
 	t += delta
 	beam_t = maxf(0.0, beam_t - delta)
 	visible = active

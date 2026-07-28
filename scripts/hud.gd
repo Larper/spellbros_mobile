@@ -7,6 +7,7 @@ extends CanvasLayer
 ## must keep receiving input while the tree is paused.
 
 var score_label: Label
+var death_label: Label
 var coin_label: Label
 var shield_chip: Label
 var star_chip: Label
@@ -29,6 +30,7 @@ var _no_mana_tween: Tween
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = 2  # above the build ghost's layer, which sits on 1
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -37,6 +39,17 @@ func _ready() -> void:
 	score_label = _label(64, Color.WHITE)
 	score_label.position = Vector2(48, 28)
 	root.add_child(score_label)
+
+	# runs lost since the app opened, dead centre at the top. Counts across
+	# retries and level changes — it is the day's tally, not this run's.
+	death_label = _label(44, Color("ff8a9b"))
+	root.add_child(death_label)
+	death_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	death_label.offset_left = -240.0
+	death_label.offset_right = 240.0
+	death_label.offset_top = 26.0
+	death_label.offset_bottom = 86.0
+	death_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	coin_label = _label(64, Color("f4c15d"))
 	root.add_child(coin_label)
@@ -105,9 +118,11 @@ func _ready() -> void:
 	pause_button.add_theme_font_size_override("font_size", 44)
 	pause_button.focus_mode = Control.FOCUS_NONE
 	root.add_child(pause_button)
+	# shifted off dead centre: the death counter owns the middle now, and the
+	# button still sits well clear of the right-anchored energy readout
 	pause_button.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	pause_button.offset_left = -70.0
-	pause_button.offset_right = 70.0
+	pause_button.offset_left = 250.0
+	pause_button.offset_right = 390.0
 	pause_button.offset_top = 20.0
 	pause_button.offset_bottom = 110.0
 	pause_button.pressed.connect(_toggle_pause)
@@ -205,7 +220,7 @@ func _build_menu(root: Control) -> void:
 	# top-anchored layout: title, subtitle, then the list growing downward,
 	# so the first (playable) button can never end up off-screen
 	var title := _label(120, Color("f4c15d"))
-	title.text = "EVERYDAY RUN"
+	title.text = "EVERYDAY LIFE"
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	menu_root.add_child(title)
 	title.offset_left = -700.0
@@ -378,6 +393,10 @@ func update_score(m: int) -> void:
 	score_label.text = str(m) + " m"
 
 
+func update_deaths(n: int) -> void:
+	death_label.text = "DEATHS " + str(n)
+
+
 func update_coins(n: int) -> void:
 	coin_label.text = "ENERGY " + str(n)
 
@@ -396,9 +415,12 @@ func flash_no_mana() -> void:
 	_no_mana_tween.tween_property(no_mana_label, "modulate:a", 0.0, 0.6)
 
 
-func show_game_over(score: int, best: int, from_name: String) -> void:
+func show_game_over(score: int, best: int, from_name: String, retry_name: String) -> void:
 	final_label.text = "Distance: " + str(score) + " m"
 	best_label.text = "Best from %s: %d m" % [from_name, best]
+	# retry resumes at the furthest level unlocked, which is not always the one
+	# this run began at — say so, so the jump is never a surprise
+	restart_label.text = "Tap to try again  —  " + retry_name
 	pause_button.visible = false
 	over_root.visible = true
 	var tw := create_tween().set_loops()

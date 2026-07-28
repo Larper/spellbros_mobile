@@ -163,10 +163,14 @@ func _run_tests() -> void:
 	print("TEST nomana: coins=%d (expect 0, no free platform)" % main.coins)
 	_check(main.coins == 0, "nomana")
 
-	# mobile controls: tap left of the wizard = jump, tap right = build
+	# mobile controls: tap left of the wizard = jump, tap right = build.
+	# 400 screen px = 320 world px left, clear of the 240 px last-second-save
+	# window: the wizard is still airborne from the stomp test above, so at
+	# exactly 300 (= 240 world px) this sat on the rule's boundary and float
+	# rounding of the transform round-trip decided the outcome.
 	var wiz_x: float = (main.get_canvas_transform() * p.global_position).x
 	p.jump_buffer = 0.0
-	main._handle_tap(Vector2(wiz_x - 300.0, 500.0))
+	main._handle_tap(Vector2(wiz_x - 400.0, 500.0))
 	var left_jumps: bool = p.jump_buffer > 0.0
 	main.coins = 1
 	main.build_cooldown = 0.0
@@ -182,9 +186,9 @@ func _run_tests() -> void:
 		if c is BuiltPlatform:
 			newest = c
 	var nudge_err: float = absf(newest.global_position.x - (tap_world.x - main.BUILD_TOUCH_NUDGE))
-	print("TEST buildnudge: plat_x=%.0f tap_x=%.0f err=%.0f (expect <= 10 = snap grid)" % [
+	print("TEST buildnudge: plat_x=%.0f tap_x=%.0f err=%.2f (expect 0 — pads land on the aim)" % [
 		newest.global_position.x, tap_world.x, nudge_err])
-	_check(nudge_err <= 10.001, "build nudge left")
+	_check(nudge_err <= 0.001, "build nudge left")
 	p.jump_buffer = 0.0
 
 	# jump-zone floor: with the wizard crushed toward the left edge, a tap
@@ -754,6 +758,18 @@ func _run_tests() -> void:
 	await create_timer(1.0).timeout
 	print("TEST endrun: game_over=%s distance=%dm" % [main.game_over, int(main.distance_m)])
 
+	# "tap to try again" resumes at the furthest unlocked level, never at the
+	# one this run started from, and every lost run ticks the top-centre tally
+	main.start_level = 0
+	var want_retry: int = Levels.load_unlocked()
+	print("TEST retry: level=%d (expect %d = furthest unlocked, started from 0)" % [
+		main.retry_level(), want_retry])
+	_check(want_retry > 0 and main.retry_level() == want_retry,
+			"retry resumes at the furthest unlocked level")
+	print("TEST deathcount: deaths=%d hud=\"%s\"" % [Main.deaths, main.hud.death_label.text])
+	_check(Main.deaths > 0 and main.hud.death_label.text == "DEATHS %d" % Main.deaths,
+			"death counter tracks lost runs")
+
 	# level-band probes + beatability audit: 80 chunks per distance band
 	print("TEST phases (80 chunks each):")
 	print("  band     mega enem maxEnt climb void pilr star brdg flip sprg  minTop  pace  gap/reach mana/ch builds/ch  bad")
@@ -792,9 +808,16 @@ func _run_tests() -> void:
 	# zero once in ~10 runs, so this check gets its own 400-chunk probe
 	var starb := _probe((TerrainSpawner.PHASE_ENEMY + TerrainSpawner.PHASE_CLIMB) * 0.5, 400)
 	_check(starb["stars"] > 0, "stars spawn after enemy phase")
-	# foundations climb waves (from PHASE_CLIMB, inside level 0)
-	var climbb := _probe(130.0, 80)
+	# foundations climb waves (from PHASE_CLIMB, inside level 0). 240 chunks:
+	# the flavour coin-flip is per WAVE, so a small probe can plausibly draw
+	# only one kind and flake the both-flavours check.
+	var climbb := _probe(130.0, 240)
 	_check(climbb["climbs"] > 0 and climbb["min_top"] < 650.0, "climb waves live")
+	# both staircase flavours must appear: hoppable steps AND build steps
+	print("TEST stairs: up=%d hop=%d build=%d (expect both non-zero)" % [
+		climbb["climb_up"], climbb["hop"], climbb["climb_up"] - climbb["hop"]])
+	_check(climbb["hop"] > 0 and climbb["hop"] < climbb["climb_up"],
+			"both staircase flavours spawn")
 	# FOUNDATIONS wind-down: the band's last meters are calm plain hops —
 	# no swarm slams into the SPRINGS teach-in
 	var windb := _probe(Levels.start_m(Levels.SPRINGS) - 20.0, 80)
@@ -843,8 +866,10 @@ func _run_tests() -> void:
 	_check(flipb["dfloor"] > 0 and flipb["dceil"] > 0, "flipside dead zones cut both surfaces")
 	# dead zones must be affordable: crystals in the band outpay the builds
 	_check(flipb["mana"] >= flipb["builds"] * 0.8, "flipside build economy")
-	# and the crystals draw the flip line: transit-arc trails on most chains
-	_check(flipb["arc"] > 50, "flipside crystals ride the flip arcs")
+	# and the crystals draw the flip line: they hug the FAR strip on most
+	# chains, so following them means having already flipped (never a trail
+	# running off the end of the surface you are still standing on)
+	_check(flipb["arc"] > 50, "flipside crystals mark the far strip")
 	# UMBRA runs the standard generator but RICH: deck-start beacons plus a
 	# raised crystal chance, because mana is sight there (Neven: it starved)
 	var umbrab := _probe(Levels.start_m(Levels.UMBRA) + 100.0, 80)
@@ -930,6 +955,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	# reset pattern state so probes are independent of each other
 	main.spawner.climb_dir = 0
 	main.spawner.climb_steps_left = 0
+	main.spawner.climb_hop = false
 	main.spawner.flat_chunks_since_wave = 99
 	main.spawner.force_mega = false
 	main.spawner.last_top_y = TerrainSpawner.START_GROUND_Y
@@ -940,6 +966,7 @@ func _probe(d: float, n: int) -> Dictionary:
 	main.spawner.flip_strip_start = 0.0
 	main.spawner.flip_ceil_y = 0.0
 	var stats := {"mega": 0, "enemies": 0, "max_entities": 0, "climbs": 0,
+			"climb_up": 0, "hop": 0,
 			"voids": 0, "pillars": 0, "stars": 0, "bridge": 0, "flip": 0,
 			"dead": 0, "dfloor": 0, "dceil": 0,
 			"spring": 0, "svoid": 0, "sky": 0, "brun": 0, "gfrag": 0, "sout": 0,
@@ -963,6 +990,10 @@ func _probe(d: float, n: int) -> Dictionary:
 		stats["max_entities"] = maxi(stats["max_entities"], int(s["entities"]))
 		if s["climb"] != 0:
 			stats["climbs"] += 1
+		if s["climb"] == -1:
+			stats["climb_up"] += 1
+			if s.get("hop", false):
+				stats["hop"] += 1
 		if s["void"]:
 			stats["voids"] += 1
 		if s["pillar"]:
@@ -1073,11 +1104,45 @@ func _probe(d: float, n: int) -> Dictionary:
 					stats["bad"] += 1
 		elif s.get("flip", false):
 			# chain strip: needs a real shared flip window (0.25 s of travel)
-			# AND enough strip beyond it to land the ~0.54 s flip transit
-			if s["overlap"] < 0.25 * v or s["width"] + s["overlap"] < 0.62 * v:
+			# AND enough strip to land the transit that window can start —
+			# a flip taken at the LAST moment (overlap in) touches down
+			# FLIP_TRANSIT*v later and must still have strip under it
+			if s["overlap"] < 0.25 * v \
+					or s["width"] < s["overlap"] + TerrainSpawner.FLIP_TRANSIT * v:
 				stats["bad"] += 1
 		elif s["climb"] == -1:
-			stats["builds"] += 1.0  # each up-stair is one platform
+			if s.get("hop", false):
+				# HOP staircase: every step must clear on a plain jump, like
+				# any other gap — that is the whole point of the flavour
+				var disc_h: float = 1170.0 * 1170.0 - 6600.0 * s["rise"]
+				if disc_h < 0.0 or s["gap"] > v * (1170.0 + sqrt(disc_h)) / 3300.0:
+					stats["bad"] += 1
+			else:
+				# BUILD staircase: jump off the lower deck, land on the pad
+				# built on the marker cup, jump off the pad onto the step.
+				# Both hops are checked against the real arc at THIS speed —
+				# the fixed-pixel version passed at 470 and stranded the
+				# wizard against the next pillar at the 900 cap (Neven).
+				stats["builds"] += 1.0
+				var pad_h := TerrainSpawner.CLIMB_PAD_H
+				var step_h: float = s["rise"] - pad_h
+				# 200 px, not the theoretical 207: neither hop may live on
+				# the last few pixels of the jump ceiling
+				if pad_h > 200.0 or step_h > 200.0:
+					stats["bad"] += 1  # a hop that outruns the jump ceiling
+				else:
+					var d2: float = 1170.0 * 1170.0 - 6600.0 * step_h
+					# hop 2 is taken anywhere from the pad's centre (where hop
+					# 1 puts you down) to its right edge, so BOTH ends of that
+					# run-up must clear the step's face and still land on top
+					var half_pad := BuiltPlatform.SIZE.x * 0.5
+					var run_out: float = s["gap"] - main.spawner.climb_pad_x(v)
+					var up := v * (1170.0 - sqrt(d2)) / 3300.0   # face cleared by
+					var down := v * (1170.0 + sqrt(d2)) / 3300.0  # step reached by
+					if run_out - half_pad < up or run_out > down:
+						stats["bad"] += 1  # runs into the pillar, or falls short
+					elif down + half_pad - run_out > s["width"] - 30.0:
+						stats["bad"] += 1  # sails clean over the step's deck
 		elif s["mega"]:
 			stats["builds"] += 1.0
 			if s["gap"] > one_build:

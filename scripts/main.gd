@@ -62,6 +62,9 @@ static var session_best := 0.0
 ## -1 = show the level-select menu; otherwise the level index to auto-start
 ## (kept across scene reloads so death -> tap retries the same level fast)
 static var auto_start_level := -1
+## Runs lost since the app was opened. Static so it survives the scene reload
+## a retry does; the HUD shows it top-centre.
+static var deaths := 0
 
 var player: Player
 var cam: Camera2D
@@ -71,6 +74,7 @@ var audio: GameAudio
 var psy: PsyTheme
 var bro: EchoBro
 var wizard_light: PointLight2D
+var ghost: BuildGhost  # PC build preview; null on touch-only devices
 
 var coins := START_COINS
 var start_level := 0
@@ -125,6 +129,19 @@ func _ready() -> void:
 	add_child(hud)
 	hud.update_coins(coins)
 	hud.update_score(0)
+	hud.update_deaths(Main.deaths)
+
+	# PC only: the build aim ghost. A finger already marks its own aim point,
+	# so touch devices have nothing to preview (and headless has no mouse).
+	# It gets its own CanvasLayer UNDER the HUD's: drawing in screen space is
+	# what keeps it nailed to the cursor while the world slides past.
+	if DisplayServer.has_feature(DisplayServer.FEATURE_MOUSE):
+		var ghost_layer := CanvasLayer.new()
+		ghost_layer.layer = 1
+		add_child(ghost_layer)
+		ghost = BuildGhost.new()
+		ghost.main = self
+		ghost_layer.add_child(ghost)
 
 	psy = PsyTheme.new()
 	add_child(psy)
@@ -305,13 +322,33 @@ func _handle_tap(screen_pos: Vector2) -> void:
 	if game_over:
 		_maybe_restart()
 		return
-	# Mobile controls: the wizard splits the screen. Tap anywhere to his
-	# left to jump, anywhere to his right to build a platform there.
-	# The divider never drops below the wizard's normal resting position:
-	# when the crush-camera pushes him toward the left edge (stalled while
-	# stair-building), the jump zone must not shrink away right when jumps
-	# matter most.
-	var world_pos: Vector2 = get_canvas_transform().affine_inverse() * screen_pos
+	if tap_builds(screen_pos):
+		_try_build(build_position_for(screen_to_world(screen_pos)))
+	else:
+		_jump_pressed()
+
+
+func screen_to_world(screen_pos: Vector2) -> Vector2:
+	return get_canvas_transform().affine_inverse() * screen_pos
+
+
+## Where a build aimed at this world point actually lands: dead on the aim,
+## give or take the thumb nudge. Pads used to snap to a 20 px world grid, which
+## was invisible on a 240 px slab but made the PC preview hop — the mouse holds
+## still in SCREEN space while the world slides underneath it, so the snapped
+## world point jumped a grid cell at a time and read as left-right jitter.
+func build_position_for(world_pos: Vector2) -> Vector2:
+	return Vector2(world_pos.x - BUILD_TOUCH_NUDGE, world_pos.y)
+
+
+## True when a tap/click at this screen point BUILDS rather than jumps.
+## Mobile controls: the wizard splits the screen. Tap anywhere to his left to
+## jump, anywhere to his right to build a platform there. The divider never
+## drops below the wizard's normal resting position: when the crush-camera
+## pushes him toward the left edge (stalled while stair-building), the jump
+## zone must not shrink away right when jumps matter most.
+func tap_builds(screen_pos: Vector2) -> bool:
+	var world_pos := screen_to_world(screen_pos)
 	# LAST-SECOND SAVE (Neven): a tap clearly below the wizard's feet — in
 	# his FALL direction, so it mirrors on the FLIPSIDE ceiling — and not
 	# far behind him is a BUILD even inside the jump zone: dropping a pad
@@ -319,17 +356,11 @@ func _handle_tap(screen_pos: Vector2) -> void:
 	# or above wizard height, or well off to the left; both keep working.
 	var below: float = (world_pos.y - player.global_position.y) * player.gravity_dir
 	if below > 110.0 and world_pos.x > player.global_position.x - 240.0:
-		world_pos.x -= BUILD_TOUCH_NUDGE
-		_try_build(world_pos)
-		return
+		return true
 	var player_screen_x: float = (get_canvas_transform() * player.global_position).x
 	var divider_x: float = maxf(player_screen_x,
 			get_viewport().get_visible_rect().size.x * 0.5 - CAMERA_LEAD * CAMERA_ZOOM)
-	if screen_pos.x < divider_x:
-		_jump_pressed()
-	else:
-		world_pos.x -= BUILD_TOUCH_NUDGE
-		_try_build(world_pos)
+	return screen_pos.x >= divider_x
 
 
 ## True while the tap action is the gravity flip: inside FLIPSIDE minus the
@@ -350,8 +381,17 @@ func _jump_pressed() -> void:
 		player.try_jump()
 
 
+## Which level "tap to try again" drops you at: the FURTHEST one you have
+## unlocked, not whichever one this run happened to start from (Neven).
+## Dying deep in the day and being sent back to the morning is a punishment
+## for having got further. LEVELS still goes back for a deliberate replay.
+func retry_level() -> int:
+	return maxi(start_level, Levels.load_unlocked())
+
+
 func _maybe_restart() -> void:
 	if Time.get_ticks_msec() - game_over_at > RESTART_LOCKOUT_MS:
+		Main.auto_start_level = retry_level()
 		get_tree().reload_current_scene()
 
 
@@ -371,7 +411,7 @@ func _try_build(world_pos: Vector2) -> void:
 	plat.solid = lv == Levels.FLIPSIDE  # landable from both gravities
 	plat.lit = lv == Levels.UMBRA       # built lanterns mark your trail
 	plat.lifetime = platform_life_for(distance_m)
-	plat.global_position = world_pos.snapped(Vector2(20.0, 20.0))
+	plat.global_position = world_pos
 	add_child(plat)
 
 
@@ -406,6 +446,8 @@ func _on_player_died() -> void:
 		return
 	game_over = true
 	game_over_at = Time.get_ticks_msec()
+	Main.deaths += 1
+	hud.update_deaths(Main.deaths)
 	shake = 14.0
 	audio.stop_music()
 	audio.play("death")
@@ -413,4 +455,4 @@ func _on_player_died() -> void:
 	if Levels.debug_spawn_m <= 0.0:  # debug spawns never pollute the bests
 		Levels.save_best(start_level, int(distance_m))
 	hud.show_game_over(int(distance_m), Levels.best_for(start_level),
-			Levels.level_name(start_level))
+			Levels.level_name(start_level), Levels.level_name(retry_level()))
