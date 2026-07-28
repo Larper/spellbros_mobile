@@ -4,8 +4,14 @@
 # Android build artifacts (added later by export setup)
 android/
 
-# Export output (web build, zips)
-build/
+# Export output (web build, zips). The directory itself IS tracked, via its
+# .gdignore marker: without it Godot scans res://build/web, re-imports the
+# icons it just exported back into the project (bundling them into the next
+# .pck) and leaves .import sidecars that deploy.ps1 then uploads to the live
+# site. Tracking the marker also means a fresh clone has build/ already, which
+# the export needs — it fails outright on a missing target folder.
+build/*
+!build/.gdignore
 
 # OS junk
 Thumbs.db
