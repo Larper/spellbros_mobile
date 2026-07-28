@@ -77,6 +77,16 @@ static func best_for(i: int) -> int:
 	return cfg.get_value("progress", "best_%d" % i, 0)
 
 
+## SHIFT+L: wipe the ladder — every unlock and every best — back to a fresh
+## install, so the opening can be replayed as a first-timer sees it.
+static func reset_progress() -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(save_path)  # a missing file is already "reset"
+	if cfg.has_section("progress"):
+		cfg.erase_section("progress")
+	cfg.save(save_path)
+
+
 static func save_best(i: int, meters: int) -> void:
 	if meters <= best_for(i):
 		return

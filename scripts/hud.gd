@@ -11,7 +11,7 @@ var death_label: Label
 var coin_label: Label
 var shield_chip: Label
 var star_chip: Label
-var hint_label: Label
+var hint: TutorialHint
 var no_mana_label: Label
 var pause_button: Button
 var pause_root: Control
@@ -19,11 +19,16 @@ var over_root: Control
 var final_label: Label
 var best_label: Label
 var restart_label: Label
+var next_label: Label
+var next_track: ColorRect
+var next_fill: ColorRect
 var menu_root: Control
 var menu_sub: Label
 var spawn_row: Label
 var level_list: VBoxContainer
 var banner_label: Label
+
+const NEXT_BAR_W := 620.0
 
 var _no_mana_tween: Tween
 
@@ -78,18 +83,13 @@ func _ready() -> void:
 	star_chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	star_chip.visible = false
 
-	hint_label = _label(40, Color(1, 1, 1, 0.9))
-	hint_label.text = "Tap LEFT to JUMP  •  Tap RIGHT to BUILD A STEP (1 energy)"
-	root.add_child(hint_label)
-	hint_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	hint_label.offset_left = -800.0
-	hint_label.offset_right = 800.0
-	hint_label.offset_top = -150.0
-	hint_label.offset_bottom = -80.0
-	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var hint_tw := create_tween()
-	hint_tw.tween_interval(7.0)
-	hint_tw.tween_property(hint_label, "modulate:a", 0.0, 1.0)
+	# The opening instructions are played, not read — see TutorialHint. It frees
+	# itself once it has run its loops, so nothing here has to tidy it up.
+	# Anyone who has reached COMMUTE has demonstrably learned both verbs, and
+	# replaying the lesson at the top of every run is just something in the way.
+	if Levels.load_unlocked() < Levels.SPRINGS:
+		hint = TutorialHint.new()
+		add_child(hint)
 
 	no_mana_label = _label(52, Color("ff6688"))
 	no_mana_label.text = "Out of energy!"
@@ -167,6 +167,20 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key and key.pressed and not key.echo \
+			and key.keycode == KEY_L and key.shift_pressed:
+		# SHIFT+L: back to a fresh install — every unlock and best cleared, and
+		# the death tally with them, so the opening plays as a first-timer sees
+		# it. Shifted and out of the way of anything used mid-run.
+		Levels.reset_progress()
+		Main.deaths = 0
+		Main.auto_start_level = -1
+		update_deaths(0)
+		show_level_banner("PROGRESS RESET")
+		if menu_root.visible:
+			show_menu(Levels.load_unlocked())
+		get_viewport().set_input_as_handled()
+		return
+	if key and key.pressed and not key.echo \
 			and key.keycode == KEY_U and key.shift_pressed:
 		# SHIFT+U (dev cheat): every level unlocks as a starting point
 		Levels.unlock(Levels.count() - 1)
@@ -176,9 +190,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if key and key.pressed and not key.echo and menu_root.visible \
+			and key.shift_pressed \
 			and (key.keycode == KEY_UP or key.keycode == KEY_DOWN):
-		# dev aid: arrows on the menu set the late-spawn offset (SHIFT ×100)
-		var step := 100.0 if key.shift_pressed else 25.0
+		# dev aid: while SHIFT reveals the row, the arrows step it by 100 m.
+		# SHIFT is the reveal now rather than a multiplier, so the fine 25 m
+		# step moved to the wheel — see _spawn_row_input.
+		var step := 100.0
 		if key.keycode == KEY_DOWN:
 			step = -step
 		Levels.debug_spawn_m = clampf(Levels.debug_spawn_m + step, 0.0, 2000.0)
@@ -219,16 +236,18 @@ func _build_menu(root: Control) -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_root.add_child(dim)
 
-	# top-anchored layout: title, subtitle, then the list growing downward,
-	# so the first (playable) button can never end up off-screen
+	# Top-anchored layout: title, subtitle, then the list growing downward, so
+	# the first (playable) button can never end up off-screen. Everything sits
+	# 70 px lower than it used to, leaving the top strip to the death tally —
+	# the title was running straight through it.
 	var title := _label(120, Color("f4c15d"))
 	title.text = "EVERYDAY LIFE"
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	menu_root.add_child(title)
 	title.offset_left = -700.0
 	title.offset_right = 700.0
-	title.offset_top = 30.0
-	title.offset_bottom = 170.0
+	title.offset_top = 100.0
+	title.offset_bottom = 240.0
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	menu_sub = _label(40, Color(1, 1, 1, 0.85))
@@ -237,22 +256,26 @@ func _build_menu(root: Control) -> void:
 	menu_root.add_child(menu_sub)
 	menu_sub.offset_left = -700.0
 	menu_sub.offset_right = 700.0
-	menu_sub.offset_top = 180.0
-	menu_sub.offset_bottom = 240.0
+	menu_sub.offset_top = 250.0
+	menu_sub.offset_bottom = 310.0
 	menu_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	# dev row: hover it and scroll (or press ↑/↓ anywhere on the menu) to
-	# set a late-spawn offset; SHIFT steps by 100 m. mouse_filter STOP so
+	# Dev row, hidden unless SHIFT is held (see _process): it is a debugging
+	# aid, and a menu that opens with a "LATE SPAWN" line on it reads like a
+	# half-built game to anyone who is not me. A phone has no shift key, which
+	# is exactly the point — there is no way to summon it there.
+	# ↑/↓ step 100 m, the wheel over the row steps 25; mouse_filter STOP so
 	# this one label hears the wheel itself.
 	spawn_row = _label(34, Color("7bd5d6"))
 	spawn_row.mouse_filter = Control.MOUSE_FILTER_STOP
 	spawn_row.gui_input.connect(_spawn_row_input)
 	spawn_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	spawn_row.visible = false
 	menu_root.add_child(spawn_row)
 	spawn_row.offset_left = -700.0
 	spawn_row.offset_right = 700.0
-	spawn_row.offset_top = 244.0
-	spawn_row.offset_bottom = 296.0
+	spawn_row.offset_top = 314.0
+	spawn_row.offset_bottom = 366.0
 	spawn_row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_update_spawn_row()
 
@@ -264,7 +287,9 @@ func _build_menu(root: Control) -> void:
 	level_list.grow_vertical = Control.GROW_DIRECTION_END
 	level_list.offset_left = -430.0
 	level_list.offset_right = 430.0
-	level_list.offset_top = 310.0
+	# 7 rows of 76 + 10 separation = 602, so this still lands ~100 px clear of
+	# the bottom on the 1080-tall canvas
+	level_list.offset_top = 380.0
 
 
 ## (Re)build the level buttons for the current unlock state and show the menu.
@@ -292,15 +317,17 @@ func show_menu(unlocked: int) -> void:
 	menu_root.visible = true
 	pause_button.visible = false
 	death_label.visible = true
+	_show_hint(false)  # the demo belongs to the run, not to the menu over it
 	_update_spawn_row()
 
 
-## Wheel over the LATE SPAWN row adjusts the offset; SHIFT steps by 100 m.
+## Wheel over the LATE SPAWN row nudges the offset by 25 m — the fine step,
+## since SHIFT is now what reveals the row rather than a multiplier.
 func _spawn_row_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
 	if mb == null or not mb.pressed:
 		return
-	var step := 100.0 if mb.shift_pressed else 25.0
+	var step := 25.0
 	if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 		step = -step
 	elif mb.button_index != MOUSE_BUTTON_WHEEL_UP:
@@ -309,15 +336,32 @@ func _spawn_row_input(event: InputEvent) -> void:
 	_update_spawn_row()
 
 
+## The dev row only exists while SHIFT is down. Polled rather than driven off
+## key events because it has to disappear the instant the key is released, and
+## the HUD runs in ALWAYS mode so this keeps ticking while the menu holds the
+## tree paused.
+func _process(_delta: float) -> void:
+	if spawn_row != null:
+		spawn_row.visible = menu_root.visible and Input.is_key_pressed(KEY_SHIFT)
+
+
 func _update_spawn_row() -> void:
-	spawn_row.text = "LATE SPAWN  +%d m     scroll here / ↑ ↓  ·  SHIFT ×100" \
+	spawn_row.text = "LATE SPAWN  +%d m     ↑ ↓ ±100  ·  scroll here ±25" \
 			% int(Levels.debug_spawn_m)
+
+
+## The instruction demo frees itself once it has run, so every caller has to
+## cope with it already being gone.
+func _show_hint(on: bool) -> void:
+	if is_instance_valid(hint):
+		hint.visible = on
 
 
 func hide_menu() -> void:
 	menu_root.visible = false
 	pause_button.visible = true
 	death_label.visible = false
+	_show_hint(true)
 
 
 ## Big center-screen announcement when a level starts or is unlocked.
@@ -353,9 +397,32 @@ func _build_game_over(root: Control) -> void:
 	best_label = _label(48, Color("7bd5d6"))
 	_center_row(over_root, best_label, 0.0, 60.0)
 
+	# HOW CLOSE YOU CAME. "You died at 238 m" is a fact nobody restarts for;
+	# "62 m short of COMMUTE" is. The bar fills across the band this run ended
+	# in, so the near-misses look near.
+	next_label = _label(42, Color("f4c15d"))
+	_center_row(over_root, next_label, 78.0, 128.0)
+
+	next_track = ColorRect.new()
+	next_track.color = Color(1.0, 1.0, 1.0, 0.16)
+	next_track.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	over_root.add_child(next_track)
+	next_track.set_anchors_preset(Control.PRESET_CENTER)
+	next_track.offset_left = -NEXT_BAR_W * 0.5
+	next_track.offset_right = NEXT_BAR_W * 0.5
+	next_track.offset_top = 134.0
+	next_track.offset_bottom = 152.0
+
+	next_fill = ColorRect.new()
+	next_fill.color = Color("f4c15d")
+	next_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	next_track.add_child(next_fill)
+	next_fill.position = Vector2.ZERO
+	next_fill.size = Vector2(0.0, 18.0)
+
 	restart_label = _label(44, Color(1, 1, 1, 0.85))
 	restart_label.text = "Tap to try again"
-	_center_row(over_root, restart_label, 120.0, 180.0)
+	_center_row(over_root, restart_label, 176.0, 236.0)
 
 	var levels_button := Button.new()
 	levels_button.text = "LEVELS"
@@ -365,12 +432,31 @@ func _build_game_over(root: Control) -> void:
 	levels_button.set_anchors_preset(Control.PRESET_CENTER)
 	levels_button.offset_left = -160.0
 	levels_button.offset_right = 160.0
-	levels_button.offset_top = 220.0
-	levels_button.offset_bottom = 300.0
+	levels_button.offset_top = 264.0
+	levels_button.offset_bottom = 344.0
 	levels_button.pressed.connect(func() -> void:
 		var main = get_tree().get_first_node_in_group("main")
 		if main:
 			main.to_menu())
+
+
+## "How far short you fell", measured against the level AFTER wherever this
+## run ended — so it is always true of the run just played, however deep it
+## got. Hidden in the last band, where there is no next thing to chase.
+func _show_next_milestone(score: int) -> void:
+	var lv := Levels.level_for(float(score))
+	var nxt := lv + 1
+	var show: bool = nxt < Levels.count()
+	next_label.visible = show
+	next_track.visible = show
+	if not show:
+		return
+	var from := Levels.start_m(lv)
+	var to := Levels.start_m(nxt)
+	next_label.text = "NEXT: %s at %d m  —  %d m to go" % [
+		Levels.level_name(nxt), int(to), maxi(0, int(to) - score)]
+	var frac := clampf((float(score) - from) / maxf(to - from, 1.0), 0.0, 1.0)
+	next_fill.size = Vector2(NEXT_BAR_W * frac, 18.0)
 
 
 func _center_row(parent: Control, l: Label, top: float, bottom: float) -> void:
@@ -425,8 +511,10 @@ func show_game_over(score: int, best: int, from_name: String, retry_name: String
 	# retry resumes at the furthest level unlocked, which is not always the one
 	# this run began at — say so, so the jump is never a surprise
 	restart_label.text = "Tap to try again  —  " + retry_name
+	_show_next_milestone(score)
 	pause_button.visible = false
 	death_label.visible = true
+	_show_hint(false)
 	over_root.visible = true
 	var tw := create_tween().set_loops()
 	tw.tween_property(restart_label, "modulate:a", 0.25, 0.6)

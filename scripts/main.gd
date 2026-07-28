@@ -57,6 +57,19 @@ const RESTART_LOCKOUT_MS := 600.0
 ## because pitch black needs real preparation time.
 const BANNER_LEAD_M := 18.0
 const BANNER_LEAD_UMBRA_M := 45.0
+## Approach signs: how far out from each boundary they hang, and how high in
+## the frame. A 40 m countdown that starts 70 m into the band — squeezed
+## between two failures. At 80/40 m out they were read by nobody, since runs
+## end around the 120 m mark; started at 20 m they landed on top of someone
+## still working out which half of the screen does what (Neven, both ways).
+## 70 m is just past where the instruction demo finishes — 12.8 s of it, about
+## 60 m at the opening speed — so the first sign arrives to a player who has
+## learned the verbs and has nothing else to read. A run ending at 120 m still
+## passes two of them. The window spans 200 m against 300 m between
+## boundaries, so two destinations are never signposted at once.
+const SIGN_LEADS_M := [230.0, 190.0, 150.0, 110.0, 70.0, 30.0]
+const SIGN_Y := 320.0
+const SIGN_SPAWN_AHEAD_M := 26.0
 
 static var session_best := 0.0
 ## -1 = show the level-select menu; otherwise the level index to auto-start
@@ -75,6 +88,8 @@ var psy: PsyTheme
 var bro: EchoBro
 var wizard_light: PointLight2D
 var ghost: BuildGhost  # PC build preview; null on touch-only devices
+var energy_tag: Label  # the live energy count, riding over the commuter
+var _tag_empty := false  # last colour state, so the override is not reset every frame
 
 var coins := START_COINS
 var start_level := 0
@@ -87,6 +102,7 @@ var game_over_at := 0.0
 var build_cooldown := 0.0
 var start_x := 0.0
 var shake := 0.0
+var _signs_done := {}  # meter marks already hung, so a sign is placed once
 
 
 func _ready() -> void:
@@ -115,6 +131,22 @@ func _ready() -> void:
 	wizard_light = PsyTheme.make_light(460.0, 1.2)
 	wizard_light.enabled = false
 	player.add_child(wizard_light)
+
+	# Energy rides over the commuter's head. The top-right counter is fine for
+	# reading between runs but useless mid-run: you are watching the next gap,
+	# and the corner is the one place your eyes never go (Neven). Red at zero,
+	# so "I cannot build" is something you see rather than something you find
+	# out by tapping. Parented to the player so it interpolates with him.
+	energy_tag = Label.new()
+	energy_tag.add_theme_font_size_override("font_size", 44)
+	energy_tag.add_theme_color_override("font_color", Color("f4c15d"))
+	energy_tag.add_theme_color_override("font_outline_color", Color(0.05, 0.03, 0.12, 0.9))
+	energy_tag.add_theme_constant_override("outline_size", 12)
+	energy_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	energy_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	energy_tag.size = Vector2(200.0, 56.0)
+	energy_tag.z_index = 60
+	player.add_child(energy_tag)
 
 	bro = EchoBro.new()
 	add_child(bro)
@@ -190,6 +222,9 @@ func to_menu() -> void:
 
 func _physics_process(delta: float) -> void:
 	build_cooldown = maxf(0.0, build_cooldown - delta)
+	# every frame, not only on the sites that spend: the friend's burn takes a
+	# coin from inside EchoBro, and this readout must never lag the pool
+	refresh_energy_tag()
 
 	if not game_over:
 		distance_m = maxf(distance_m, (player.global_position.x - start_x) / 100.0 + start_offset_m)
@@ -201,6 +236,7 @@ func _physics_process(delta: float) -> void:
 		if lv > cur_level:
 			cur_level = lv
 			Levels.unlock(lv)
+		_hang_approach_signs()
 		# the banner still runs AHEAD of the boundary (announcing a level as
 		# it starts is too late to prepare), but only by its own short lead
 		var nxt := announced_level + 1
@@ -258,6 +294,28 @@ func _physics_process(delta: float) -> void:
 		cam.offset = Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
 	else:
 		cam.offset = Vector2.ZERO
+
+
+## Hang the approach signs for whichever boundary is coming up, once each.
+## They go in as children of the spawner so its cleanup sweep collects them
+## behind the camera along with everything else.
+func _hang_approach_signs() -> void:
+	for i in range(Levels.count()):
+		var boundary := Levels.start_m(i)
+		if boundary <= 0.0 or boundary < distance_m:
+			continue
+		for lead: float in SIGN_LEADS_M:
+			var at := boundary - lead
+			if at <= distance_m or at > distance_m + SIGN_SPAWN_AHEAD_M:
+				continue
+			if _signs_done.has(at):
+				continue
+			_signs_done[at] = true
+			var sign := MilestoneSign.new()
+			sign.label = Levels.level_name(i)
+			sign.metres = int(lead)
+			sign.position = Vector2(start_x + (at - start_offset_m) * 100.0, SIGN_Y)
+			spawner.add_child(sign)
 
 
 ## CAMERA_Y always — except the staircase allowance (see the constants).
@@ -412,6 +470,7 @@ func _try_build(world_pos: Vector2) -> void:
 		return
 	coins -= PLATFORM_COST
 	hud.update_coins(coins)
+	refresh_energy_tag()
 	build_cooldown = BUILD_COOLDOWN
 	audio.play("build")
 	var plat := BuiltPlatform.new()
@@ -424,11 +483,29 @@ func _try_build(world_pos: Vector2) -> void:
 	add_child(plat)
 
 
+## Keep the over-the-head readout in step with the pool. Called from every
+## place the count moves, and once per frame for the gravity-flip mirroring.
+func refresh_energy_tag() -> void:
+	if energy_tag == null or player == null:
+		return
+	energy_tag.text = str(coins)
+	var empty := coins <= 0
+	if empty != _tag_empty:
+		_tag_empty = empty
+		energy_tag.add_theme_color_override("font_color",
+				Color("ff5566") if empty else Color("f4c15d"))
+	# over his head running the floor, under it running the FLIPSIDE ceiling —
+	# the text itself stays upright either way
+	energy_tag.position = Vector2(-100.0, -132.0 if player.gravity_dir > 0.0 else 76.0)
+	energy_tag.visible = not player.dead
+
+
 func add_coin(amount: int = 1) -> void:
 	if game_over:
 		return
 	coins += amount
 	hud.update_coins(coins)
+	refresh_energy_tag()
 	audio.play("pickup")
 
 
